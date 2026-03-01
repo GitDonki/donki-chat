@@ -64,7 +64,7 @@
   }
 </script>
 
-<div class="chat-input bg-bg-secondary border-t border-border p-4">
+<div class="chat-input bg-bg-secondary border-t border-border p-2 sm:p-4">
   {#if uploadedImages.length > 0}
     <div class="image-previews flex flex-wrap gap-2 mb-3">
       {#each uploadedImages as image}
@@ -96,7 +96,7 @@
     <button
       type="button"
       on:click={() => showUpload = !showUpload}
-      class="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+      class="p-2.5 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary touch-manipulation"
       title="Bild hochladen"
     >
       <Paperclip class="w-5 h-5" />
@@ -108,9 +108,9 @@
         bind:value={message}
         on:keydown={handleKeydown}
         on:input={handleInput}
-        placeholder="Schreibe eine Nachricht... (Enter zum Senden, Shift+Enter für neue Zeile)"
+        placeholder="Nachricht schreiben..."
         rows="1"
-        class="w-full bg-bg-tertiary border border-border rounded-lg px-4 py-3 pr-12 resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-text-primary placeholder-text-secondary"
+        class="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2.5 sm:px-4 sm:py-3 resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-text-primary placeholder-text-secondary text-base"
         disabled={disabled || isLoading}
       ></textarea>
     </div>
@@ -118,7 +118,7 @@
     <button
       type="submit"
       disabled={disabled || isLoading || (!message.trim() && uploadedImages.length === 0)}
-      class="p-3 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      class="p-2.5 sm:p-3 rounded-lg bg-accent hover:bg-accent-hover active:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation"
     >
       {#if isLoading}
         <Loader2 class="w-5 h-5 text-white animate-spin" />
@@ -132,6 +132,14 @@
 <style>
   textarea {
     max-height: 200px;
-    min-height: 48px;
+    min-height: 44px;
+    /* Prevent iOS zoom on focus */
+    font-size: 16px;
+  }
+  
+  @media (min-width: 640px) {
+    textarea {
+      min-height: 48px;
+    }
   }
 </style>

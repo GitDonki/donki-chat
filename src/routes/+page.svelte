@@ -147,20 +147,20 @@
 
 <div class="flex flex-col h-screen">
   <!-- Header -->
-  <header class="flex items-center justify-between px-4 py-3 bg-bg-secondary border-b border-border">
-    <div class="flex items-center gap-3">
+  <header class="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-3 bg-bg-secondary border-b border-border">
+    <div class="flex items-center gap-2 sm:gap-3">
       <img 
         src="https://files.catbox.moe/3vz1n6.jpg" 
         alt="Donki" 
-        class="w-9 h-9 rounded-full object-cover border-2 border-accent"
+        class="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover border-2 border-accent"
       />
-      <h1 class="text-lg font-semibold text-text-primary">Donki Chat</h1>
+      <h1 class="text-base sm:text-lg font-semibold text-text-primary">Donki Chat</h1>
     </div>
     
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-1 sm:gap-2">
       <button
         on:click={startNewConversation}
-        class="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+        class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
         title="Neuer Chat"
       >
         <Plus class="w-5 h-5" />
@@ -168,7 +168,7 @@
       
       <button
         on:click={clearHistory}
-        class="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-red-400"
+        class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-red-400"
         title="Chat löschen"
       >
         <Trash2 class="w-5 h-5" />
@@ -182,15 +182,15 @@
     class="flex-1 overflow-y-auto"
   >
     {#if $messages.length === 0}
-      <div class="flex items-center justify-center h-full">
+      <div class="flex items-center justify-center h-full px-4">
         <div class="text-center text-text-secondary">
           <img 
             src="https://files.catbox.moe/3vz1n6.jpg" 
             alt="Donki" 
-            class="w-24 h-24 rounded-full object-cover border-4 border-accent mx-auto mb-4"
+            class="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-accent mx-auto mb-3 sm:mb-4"
           />
-          <p class="text-lg">Willkommen bei Donki Chat! 🐧</p>
-          <p class="text-sm mt-2">Schreibe eine Nachricht um zu beginnen.</p>
+          <p class="text-base sm:text-lg">Willkommen bei Donki Chat! 🐧</p>
+          <p class="text-xs sm:text-sm mt-2">Schreibe eine Nachricht um zu beginnen.</p>
         </div>
       </div>
     {:else}

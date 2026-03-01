@@ -31,25 +31,56 @@ html {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
   -webkit-font-smoothing: antialiased;
+  /* Prevent pull-to-refresh on mobile */
+  overscroll-behavior: none;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 8px;
+/* Mobile-first touch optimizations */
+@media (hover: none) and (pointer: coarse) {
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+/* Safe area padding for notched devices */
+.chat-input {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 9999px;
+@media (min-width: 640px) {
+  .chat-input {
+    padding-bottom: 1rem;
+  }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+/* Hide scrollbar on mobile, show on desktop */
+@media (max-width: 639px) {
+  ::-webkit-scrollbar {
+    width: 0;
+    display: none;
+  }
+}
+
+/* Scrollbar styling for desktop */
+@media (min-width: 640px) {
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+  }
 }
 
 /* Code blocks in markdown */
