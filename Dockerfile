@@ -3,8 +3,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies for native modules
-RUN apk add --no-cache python3 make g++
+# Install dependencies for native modules (sharp needs vips)
+RUN apk add --no-cache python3 make g++ vips-dev
 
 # Copy package files
 COPY package*.json ./
@@ -23,8 +23,8 @@ FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
-# Install runtime dependencies for native modules
-RUN apk add --no-cache python3 make g++
+# Install runtime dependencies for native modules (sharp needs vips runtime)
+RUN apk add --no-cache python3 make g++ vips
 
 # Copy built app and package files
 COPY --from=builder /app/build ./build

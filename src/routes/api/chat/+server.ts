@@ -220,6 +220,9 @@ export const POST: RequestHandler = async ({ request }) => {
           runId = result.runId;
           console.log('[Chat] Got runId:', runId);
           
+          // Send runId to client so it can filter SSE events
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'runId', runId })}\n\n`));
+          
           // Timeout after 2 minutes
           setTimeout(() => {
             if (!resolved) {

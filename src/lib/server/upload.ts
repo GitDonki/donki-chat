@@ -2,12 +2,17 @@ import { writeFile, mkdir, readFile, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, extname } from 'path';
 import { v4 as uuid } from 'uuid';
+import sharp from 'sharp';
 import { createUpload, getUpload } from './db';
 import { env } from '$env/dynamic/private';
 
 const UPLOAD_DIR = env.UPLOAD_DIR || './data/uploads';
 const MAX_FILE_SIZE = parseInt(env.MAX_FILE_SIZE || '10485760'); // 10MB default
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+// Compression settings for WebSocket-safe images
+const MAX_IMAGE_DIMENSION = 1536;
+const JPEG_QUALITY = 80;
 
 export interface UploadResult {
   id: string;
@@ -56,23 +61,53 @@ export async function saveUpload(file: File): Promise<UploadResult> {
   }
   
   const id = uuid();
-  const ext = extname(file.name) || getExtensionFromMime(file.type);
   const sanitizedName = sanitizeFilename(file.name);
+  
+  // Read file content
+  let buffer = Buffer.from(await file.arrayBuffer());
+  let mimeType = file.type;
+  let finalSize = file.size;
+  
+  // Compress images to avoid WebSocket size limits (Error 1009)
+  // GIFs are excluded to preserve animation
+  if (mimeType !== 'image/gif') {
+    try {
+      const compressed = await sharp(buffer)
+        .resize(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, { 
+          fit: 'inside', 
+          withoutEnlargement: true 
+        })
+        .jpeg({ quality: JPEG_QUALITY })
+        .toBuffer();
+      
+      // Only use compressed version if it's actually smaller
+      if (compressed.length < buffer.length) {
+        console.log(`[Upload] Compressed ${file.name}: ${buffer.length} -> ${compressed.length} bytes`);
+        buffer = compressed;
+        mimeType = 'image/jpeg';
+        finalSize = compressed.length;
+      }
+    } catch (e) {
+      console.warn('[Upload] Compression failed, using original:', e);
+      // Continue with original buffer
+    }
+  }
+  
+  // Use .jpg extension for compressed images
+  const ext = mimeType === 'image/jpeg' ? '.jpg' : (extname(file.name) || getExtensionFromMime(mimeType));
   const storedFilename = `${id}${ext}`;
   const storedPath = join(UPLOAD_DIR, storedFilename);
   
-  // Read file content and write to disk
-  const buffer = Buffer.from(await file.arrayBuffer());
   await writeFile(storedPath, buffer);
   
   // Store in database
-  createUpload(id, sanitizedName, file.type, file.size, storedFilename);
+  createUpload(id, sanitizedName, mimeType, finalSize, storedFilename);
   
   return {
     id,
     filename: sanitizedName,
-    mimeType: file.type,
-    size: file.size
+    mimeType: mimeType,
+    size: finalSize
   };
 }
 

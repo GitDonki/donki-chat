@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { Plus, Trash2, Sun, Moon, Menu } from 'lucide-svelte';
   import { theme } from '$lib/stores/theme';
   import ChatMessage from '$lib/components/ChatMessage.svelte';
@@ -9,6 +9,9 @@
   
   let messagesContainer: HTMLDivElement;
   let conversationId: string | null = null;
+  let eventSource: EventSource | null = null;
+  // Track message IDs we've sent from this UI to avoid duplicates
+  let localMessageIds = new Set<string>();
   
   onMount(async () => {
     // Load conversations list and start a new conversation
@@ -16,7 +19,73 @@
     await startNewConversation();
     // Sync gateway history in background
     syncGatewayHistory();
+    // Subscribe to live events for messages from other channels
+    subscribeToEvents();
   });
+  
+  onDestroy(() => {
+    eventSource?.close();
+  });
+  
+  function subscribeToEvents() {
+    eventSource = new EventSource('/api/chat/events');
+    
+    eventSource.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'chat' && data.payload) {
+          const payload = data.payload;
+          
+          // Check if this is a message we need to display
+          // payload.role: 'user' or 'assistant'
+          // payload.content: the message content
+          // payload.runId: unique identifier
+          
+          // Skip if this is a response to a message WE sent (we already show it via streaming)
+          if (payload.runId && localMessageIds.has(payload.runId)) {
+            return;
+          }
+          
+          // Only show assistant messages from other channels
+          // (user messages from other channels are not as relevant)
+          if (payload.role === 'assistant' && payload.content) {
+            const content = typeof payload.content === 'string' ? payload.content :
+              Array.isArray(payload.content) ? payload.content.map((c: any) => c.text || '').join('') : '';
+            
+            if (!content.trim()) return;
+            
+            // Check if we already have this message (by content prefix)
+            const currentMessages = $messages;
+            const contentPrefix = `assistant:${content.slice(0, 100)}`;
+            const exists = currentMessages.some((m: any) => 
+              m.role === 'assistant' && `${m.role}:${m.content.slice(0, 100)}` === contentPrefix
+            );
+            
+            if (!exists) {
+              const newMessage: ChatMessageType = {
+                id: payload.id || crypto.randomUUID(),
+                role: 'assistant',
+                content,
+                createdAt: new Date(payload.timestamp || Date.now()),
+                isStreaming: false
+              };
+              
+              messages.addMessage(newMessage);
+              await scrollToBottom();
+              console.log('[Events] Added message from other channel');
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Events] Parse error:', e);
+      }
+    };
+    
+    eventSource.onerror = () => {
+      console.warn('[Events] SSE connection error, will auto-reconnect');
+    };
+  }
   
   async function syncGatewayHistory() {
     try {
@@ -185,7 +254,10 @@
             try {
               const event = JSON.parse(data);
               
-              if (event.type === 'delta' && event.content) {
+              if (event.type === 'runId' && event.runId) {
+                // Track this runId so we don't duplicate messages from SSE
+                localMessageIds.add(event.runId);
+              } else if (event.type === 'delta' && event.content) {
                 messages.appendToMessage(assistantMessageId, event.content);
                 await scrollToBottom();
               } else if (event.type === 'no-reply') {
