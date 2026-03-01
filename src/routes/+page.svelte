@@ -47,11 +47,14 @@
             return;
           }
           
-          // Only show assistant messages from other channels
-          // (user messages from other channels are not as relevant)
-          if (payload.role === 'assistant' && payload.content) {
-            const content = typeof payload.content === 'string' ? payload.content :
-              Array.isArray(payload.content) ? payload.content.map((c: any) => c.text || '').join('') : '';
+          // Only show final assistant messages from other channels
+          // Gateway format: { state: 'final', message: { role, content } }
+          const msg = payload.message || payload;
+          const isFinal = payload.state === 'final';
+          
+          if (isFinal && msg.role === 'assistant' && msg.content) {
+            const content = typeof msg.content === 'string' ? msg.content :
+              Array.isArray(msg.content) ? msg.content.map((c: any) => c.text || '').join('') : '';
             
             if (!content.trim()) return;
             
@@ -64,10 +67,10 @@
             
             if (!exists) {
               const newMessage: ChatMessageType = {
-                id: payload.id || crypto.randomUUID(),
+                id: msg.id || payload.runId || crypto.randomUUID(),
                 role: 'assistant',
                 content,
-                createdAt: new Date(payload.timestamp || Date.now()),
+                createdAt: new Date(msg.timestamp || payload.ts || Date.now()),
                 isStreaming: false
               };
               
