@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* Dark Mode Colors */
+  /* Base Colors - will be overridden by theme */
   --color-bg-primary: #0f0f0f;
   --color-bg-secondary: #1a1a1a;
   --color-bg-tertiary: #252525;
@@ -12,7 +12,10 @@
   --color-border: #2e2e2e;
 }
 
-:root {
+/* Dark Theme (default) */
+:root,
+:root.dark,
+[data-theme="dark"] {
   --bg-primary: #0f0f0f;
   --bg-secondary: #1a1a1a;
   --bg-tertiary: #252525;
@@ -22,11 +25,32 @@
   --accent-hover: #818cf8;
   --border: #2e2e2e;
   --radius: 8px;
+  color-scheme: dark;
+}
+
+/* Light Theme */
+:root.light,
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e5e5e5;
+  --text-primary: #171717;
+  --text-secondary: #525252;
+  --accent: #4f46e5;
+  --accent-hover: #6366f1;
+  --border: #d4d4d4;
+  color-scheme: light;
 }
 
 html {
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Theme transition for all elements using CSS variables */
+*, *::before, *::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
 }
 
 body {

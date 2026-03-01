@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { Plus, Trash2 } from 'lucide-svelte';
+  import { Plus, Trash2, Sun, Moon } from 'lucide-svelte';
+  import { theme } from '$lib/stores/theme';
   import ChatMessage from '$lib/components/ChatMessage.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
   import { messages, currentConversation, isLoading, error, type ChatMessage as ChatMessageType } from '$lib/stores/chat';
@@ -158,6 +159,18 @@
     </div>
     
     <div class="flex items-center gap-1 sm:gap-2">
+      <button
+        on:click={() => theme.toggle()}
+        class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+        title="Theme wechseln"
+      >
+        {#if $theme === 'light'}
+          <Moon class="w-5 h-5" />
+        {:else}
+          <Sun class="w-5 h-5" />
+        {/if}
+      </button>
+      
       <button
         on:click={startNewConversation}
         class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
