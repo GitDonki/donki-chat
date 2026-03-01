@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  donki-chat:
+    build: .
+    container_name: donki-chat
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PASSWORD_HASH=${PASSWORD_HASH}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - OPENCLAW_API_URL=${OPENCLAW_API_URL:-http://host.docker.internal:8080}
+      - OPENCLAW_API_KEY=${OPENCLAW_API_KEY:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-20250514}
+      - MAX_TOKENS=${MAX_TOKENS:-4096}
+      - DATABASE_PATH=/app/data/chat.db
+      - UPLOAD_DIR=/app/data/uploads
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-10485760}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - donki-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/auth/check"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  donki-network:
+    external: true
