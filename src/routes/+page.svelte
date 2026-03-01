@@ -1,16 +1,18 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { Plus, Trash2, Sun, Moon } from 'lucide-svelte';
+  import { Plus, Trash2, Sun, Moon, Menu } from 'lucide-svelte';
   import { theme } from '$lib/stores/theme';
   import ChatMessage from '$lib/components/ChatMessage.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
-  import { messages, currentConversation, isLoading, error, type ChatMessage as ChatMessageType } from '$lib/stores/chat';
+  import Sidebar from '$lib/components/Sidebar.svelte';
+  import { messages, currentConversation, conversationsList, isLoading, error, sidebarOpen, type ChatMessage as ChatMessageType } from '$lib/stores/chat';
   
   let messagesContainer: HTMLDivElement;
   let conversationId: string | null = null;
   
   onMount(async () => {
-    // Start a new conversation on load
+    // Load conversations list and start a new conversation
+    await conversationsList.load();
     await startNewConversation();
   });
   
@@ -23,6 +25,37 @@
       createdAt: new Date(),
       updatedAt: new Date()
     });
+  }
+  
+  async function loadConversation(id: string) {
+    try {
+      const response = await fetch(`/api/conversations/${id}`);
+      if (!response.ok) throw new Error('Failed to load conversation');
+      
+      const data = await response.json();
+      
+      conversationId = id;
+      currentConversation.set({
+        id: data.conversation.id,
+        title: data.conversation.title,
+        createdAt: new Date(data.conversation.created_at),
+        updatedAt: new Date(data.conversation.updated_at)
+      });
+      
+      // Load messages
+      messages.set(data.messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        images: m.images,
+        createdAt: new Date(m.created_at),
+        isStreaming: false
+      })));
+      
+      await scrollToBottom();
+    } catch (e) {
+      error.set('Fehler beim Laden des Chats');
+    }
   }
   
   async function scrollToBottom() {
@@ -146,84 +179,107 @@
   <title>Donki Chat</title>
 </svelte:head>
 
-<div class="flex flex-col h-screen">
-  <!-- Header -->
-  <header class="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-3 bg-bg-secondary border-b border-border">
-    <div class="flex items-center gap-2 sm:gap-3">
-      <img 
-        src="https://files.catbox.moe/3vz1n6.jpg" 
-        alt="Donki" 
-        class="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover border-2 border-accent"
-      />
-      <h1 class="text-base sm:text-lg font-semibold text-text-primary">Donki Chat</h1>
-    </div>
-    
-    <div class="flex items-center gap-1 sm:gap-2">
-      <button
-        on:click={() => theme.toggle()}
-        class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
-        title="Theme wechseln"
-      >
-        {#if $theme === 'light'}
-          <Moon class="w-5 h-5" />
-        {:else}
-          <Sun class="w-5 h-5" />
-        {/if}
-      </button>
-      
-      <button
-        on:click={startNewConversation}
-        class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
-        title="Neuer Chat"
-      >
-        <Plus class="w-5 h-5" />
-      </button>
-      
-      <button
-        on:click={clearHistory}
-        class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-red-400"
-        title="Chat löschen"
-      >
-        <Trash2 class="w-5 h-5" />
-      </button>
-    </div>
-  </header>
+<div class="flex h-screen">
+  <!-- Sidebar -->
+  <Sidebar 
+    on:select={(e) => loadConversation(e.detail.id)}
+    on:new={startNewConversation}
+    on:delete={async () => { await conversationsList.load(); }}
+  />
   
-  <!-- Messages -->
-  <div 
-    bind:this={messagesContainer}
-    class="flex-1 overflow-y-auto"
-  >
-    {#if $messages.length === 0}
-      <div class="flex items-center justify-center h-full px-4">
-        <div class="text-center text-text-secondary">
-          <img 
-            src="https://files.catbox.moe/3vz1n6.jpg" 
-            alt="Donki" 
-            class="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-accent mx-auto mb-3 sm:mb-4"
-          />
-          <p class="text-base sm:text-lg">Willkommen bei Donki Chat! 🐧</p>
-          <p class="text-xs sm:text-sm mt-2">Schreibe eine Nachricht um zu beginnen.</p>
+  <!-- Main Chat Area -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <!-- Header -->
+    <header class="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-3 bg-bg-secondary border-b border-border">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Hamburger menu for mobile -->
+        <button
+          on:click={() => sidebarOpen.set(true)}
+          class="sm:hidden p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+          title="Menü"
+        >
+          <Menu class="w-5 h-5" />
+        </button>
+        
+        <img 
+          src="https://files.catbox.moe/3vz1n6.jpg" 
+          alt="Donki" 
+          class="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover border-2 border-accent"
+        />
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-lg font-semibold text-text-primary truncate">
+            {$currentConversation?.title || 'Donki Chat'}
+          </h1>
         </div>
       </div>
-    {:else}
-      {#each $messages as message (message.id)}
-        <ChatMessage {message} />
-      {/each}
-    {/if}
-  </div>
-  
-  <!-- Error -->
-  {#if $error}
-    <div class="px-4 py-2 bg-red-900/50 border-t border-red-500 text-red-300 text-sm">
-      {$error}
+      
+      <div class="flex items-center gap-1 sm:gap-2">
+        <button
+          on:click={() => theme.toggle()}
+          class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+          title="Theme wechseln"
+        >
+          {#if $theme === 'light'}
+            <Moon class="w-5 h-5" />
+          {:else}
+            <Sun class="w-5 h-5" />
+          {/if}
+        </button>
+        
+        <button
+          on:click={startNewConversation}
+          class="hidden sm:block p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+          title="Neuer Chat"
+        >
+          <Plus class="w-5 h-5" />
+        </button>
+        
+        <button
+          on:click={clearHistory}
+          class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-red-400"
+          title="Chat löschen"
+        >
+          <Trash2 class="w-5 h-5" />
+        </button>
+      </div>
+    </header>
+    
+    <!-- Messages -->
+    <div 
+      bind:this={messagesContainer}
+      class="flex-1 overflow-y-auto"
+    >
+      {#if $messages.length === 0}
+        <div class="flex items-center justify-center h-full px-4">
+          <div class="text-center text-text-secondary">
+            <img 
+              src="https://files.catbox.moe/3vz1n6.jpg" 
+              alt="Donki" 
+              class="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-accent mx-auto mb-3 sm:mb-4"
+            />
+            <p class="text-base sm:text-lg">Willkommen bei Donki Chat! 🐧</p>
+            <p class="text-xs sm:text-sm mt-2">Schreibe eine Nachricht um zu beginnen.</p>
+          </div>
+        </div>
+      {:else}
+        {#each $messages as message (message.id)}
+          <ChatMessage {message} />
+        {/each}
+      {/if}
     </div>
-  {/if}
+    
+    <!-- Error -->
+    {#if $error}
+      <div class="px-4 py-2 bg-red-900/50 border-t border-red-500 text-red-300 text-sm">
+        {$error}
+      </div>
+    {/if}
   
-  <!-- Input -->
-  <ChatInput 
-    on:send={handleSend} 
-    disabled={false}
-    isLoading={$isLoading}
-  />
+    <!-- Input -->
+    <ChatInput 
+      on:send={handleSend} 
+      disabled={false}
+      isLoading={$isLoading}
+    />
+  </div>
 </div>
