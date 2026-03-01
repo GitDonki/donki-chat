@@ -43,6 +43,15 @@ export const POST: RequestHandler = async ({ request }) => {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'start', messageId: chatMessageId })}\n\n`));
           
+          // Keep-alive heartbeat every 10 seconds to prevent timeout
+          const heartbeat = setInterval(() => {
+            try {
+              controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+            } catch {
+              clearInterval(heartbeat);
+            }
+          }, 10000);
+          
           // Ensure gateway connection
           if (!gateway.isConnected()) {
             console.log('[Chat] Connecting to gateway...');
@@ -77,6 +86,7 @@ export const POST: RequestHandler = async ({ request }) => {
             if (payload.state === 'final' || payload.status === 'complete' || payload.done) {
               if (resolved) return; // Double-check
               resolved = true;
+              clearInterval(heartbeat);
               gateway.removeListener('chat', chatHandler);
               console.log('[ChatHandler] Complete! Fetching history...');
               
@@ -148,6 +158,7 @@ export const POST: RequestHandler = async ({ request }) => {
             if (payload.error) {
               if (resolved) return;
               resolved = true;
+              clearInterval(heartbeat);
               gateway.removeListener('chat', chatHandler);
               try {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: payload.error })}\n\n`));
@@ -171,6 +182,7 @@ export const POST: RequestHandler = async ({ request }) => {
           setTimeout(() => {
             if (!resolved) {
               resolved = true;
+              clearInterval(heartbeat);
               gateway.removeListener('chat', chatHandler);
               
               if (fullResponse) {
