@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { v4 as uuid } from 'uuid';
-import { gateway, type MultimodalContent } from '$lib/server/gateway-ws';
+import { gateway, type ImageAttachment } from '$lib/server/gateway-ws';
 import { 
   createConversation, 
   getConversation, 
@@ -173,50 +173,33 @@ export const POST: RequestHandler = async ({ request }) => {
           
           gateway.on('chat', chatHandler);
           
-          // Build message content - multimodal if images present
-          let messageContent: string | MultimodalContent[];
+          // Build attachments if images present
+          let attachments: ImageAttachment[] | undefined;
           
           if (images && images.length > 0) {
-            console.log('[Chat] Building multimodal message with', images.length, 'images');
-            const contentParts: MultimodalContent[] = [];
+            console.log('[Chat] Building attachments with', images.length, 'images');
+            attachments = [];
             
-            // Add images first
             for (const imageId of images) {
               const imageData = await getUploadAsBase64(imageId);
               if (imageData) {
                 console.log('[Chat] Adding image:', imageId, imageData.mimeType);
-                contentParts.push({
+                attachments.push({
                   type: 'image',
-                  source: {
-                    type: 'base64',
-                    data: imageData.base64,
-                    media_type: imageData.mimeType
-                  }
+                  mimeType: imageData.mimeType,
+                  content: imageData.base64  // base64 without data: prefix
                 });
               } else {
                 console.warn('[Chat] Image not found:', imageId);
               }
             }
-            
-            // Add text message
-            if (message) {
-              contentParts.push({
-                type: 'text',
-                text: message
-              });
-            }
-            
-            messageContent = contentParts;
-          } else {
-            messageContent = message;
           }
           
           // Send message to main session
-          const msgPreview = typeof messageContent === 'string' 
-            ? messageContent.slice(0, 50) 
-            : `[${messageContent.length} parts]`;
-          console.log('[Chat] Sending message to main session:', msgPreview);
-          const result = await gateway.sendMessage(messageContent);
+          const msgPreview = message ? message.slice(0, 50) : '(no text)';
+          const attachmentInfo = attachments ? ` + ${attachments.length} images` : '';
+          console.log('[Chat] Sending message to main session:', msgPreview + attachmentInfo);
+          const result = await gateway.sendMessage(message || '', attachments);
           runId = result.runId;
           console.log('[Chat] Got runId:', runId);
           

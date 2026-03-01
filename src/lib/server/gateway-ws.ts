@@ -16,21 +16,12 @@ interface GatewayMessage {
   event?: string;
 }
 
-export interface ImageContent {
+// Attachment format for chat.send (OpenClaw Gateway format)
+export interface ImageAttachment {
   type: 'image';
-  source: {
-    type: 'base64';
-    data: string;
-    media_type: string;
-  };
+  mimeType: string;
+  content: string;  // base64 without data: prefix
 }
-
-export interface TextContent {
-  type: 'text';
-  text: string;
-}
-
-export type MultimodalContent = ImageContent | TextContent;
 
 class GatewayConnection extends EventEmitter {
   private ws: WebSocket | null = null;
@@ -190,14 +181,21 @@ class GatewayConnection extends EventEmitter {
     });
   }
 
-  async sendMessage(message: string | MultimodalContent[]): Promise<{ runId: string }> {
+  async sendMessage(message: string, attachments?: ImageAttachment[]): Promise<{ runId: string }> {
     const idempotencyKey = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const result = await this.request('chat.send', {
+    const params: Record<string, unknown> = {
       sessionKey: SESSION_KEY,
       message,
       idempotencyKey,
       deliver: false
-    });
+    };
+    
+    // Add attachments if present
+    if (attachments && attachments.length > 0) {
+      params.attachments = attachments;
+    }
+    
+    const result = await this.request('chat.send', params);
     return result as { runId: string };
   }
 
