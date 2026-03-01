@@ -1,9 +1,13 @@
 <script lang="ts">
   import MarkdownRenderer from './MarkdownRenderer.svelte';
+  import TypingIndicator from './TypingIndicator.svelte';
   import { User } from 'lucide-svelte';
   import type { ChatMessage } from '$lib/stores/chat';
   
   export let message: ChatMessage;
+  
+  // Show typing indicator when streaming and content is empty
+  $: showTyping = message.isStreaming && !message.content;
   
   // Donki avatar URL
   const donkiAvatar = 'https://files.catbox.moe/3vz1n6.jpg';
@@ -55,7 +59,9 @@
     
     <!-- Message content -->
     <div class="message-content">
-      {#if isUser}
+      {#if showTyping}
+        <TypingIndicator />
+      {:else if isUser}
         <p class="whitespace-pre-wrap">{message.content}</p>
       {:else}
         <MarkdownRenderer content={message.content} />
