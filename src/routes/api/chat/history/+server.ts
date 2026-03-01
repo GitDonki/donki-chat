@@ -1,29 +1,28 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getMessages, deleteMessages, deleteConversation, getAllConversations } from '$lib/server/db';
+import { gateway } from '$lib/server/gateway-ws';
 
 export const GET: RequestHandler = async ({ url }) => {
-  const conversationId = url.searchParams.get('conversationId');
+  const limit = parseInt(url.searchParams.get('limit') || '50', 10);
   
-  if (conversationId) {
-    const messages = getMessages(conversationId);
-    return json({ messages });
+  try {
+    // Ensure gateway is connected
+    if (!gateway.isConnected()) {
+      await gateway.connect();
+    }
+    
+    const messages = await gateway.getHistory(limit);
+    
+    return json({ 
+      ok: true, 
+      messages 
+    });
+  } catch (error) {
+    console.error('[History API] Error:', error);
+    return json({ 
+      ok: false, 
+      error: error instanceof Error ? error.message : 'Failed to fetch history',
+      messages: []
+    }, { status: 500 });
   }
-  
-  // Return all conversations if no specific ID
-  const conversations = getAllConversations();
-  return json({ conversations });
-};
-
-export const DELETE: RequestHandler = async ({ url }) => {
-  const conversationId = url.searchParams.get('conversationId');
-  
-  if (!conversationId) {
-    return json({ error: 'conversationId required' }, { status: 400 });
-  }
-  
-  deleteMessages(conversationId);
-  deleteConversation(conversationId);
-  
-  return json({ success: true });
 };

@@ -14,7 +14,49 @@
     // Load conversations list and start a new conversation
     await conversationsList.load();
     await startNewConversation();
+    // Sync gateway history in background
+    syncGatewayHistory();
   });
+  
+  async function syncGatewayHistory() {
+    try {
+      const response = await fetch('/api/chat/history?limit=100');
+      const data = await response.json();
+      
+      if (data.ok && data.messages?.length > 0) {
+        // Transform gateway messages to our format
+        const gatewayMessages = data.messages
+          .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+          .map((m: any) => ({
+            id: m.id || crypto.randomUUID(),
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : 
+              Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '',
+            createdAt: new Date(m.timestamp || m.createdAt || Date.now()),
+            isStreaming: false
+          }));
+        
+        // Merge with existing messages (avoid duplicates by content hash)
+        const currentMessages = $messages;
+        const existingContents = new Set(currentMessages.map((m: any) => `${m.role}:${m.content.slice(0, 100)}`));
+        
+        const newMessages = gatewayMessages.filter((m: any) => 
+          !existingContents.has(`${m.role}:${m.content.slice(0, 100)}`)
+        );
+        
+        if (newMessages.length > 0) {
+          // Prepend gateway messages that we don't have locally
+          const merged = [...newMessages, ...currentMessages].sort(
+            (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          messages.set(merged);
+          await scrollToBottom();
+        }
+      }
+    } catch (e) {
+      console.warn('[HistorySync] Failed to sync gateway history:', e);
+    }
+  }
   
   async function startNewConversation() {
     messages.clear();
@@ -60,9 +102,17 @@
   
   async function scrollToBottom() {
     await tick();
-    if (messagesContainer) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
+    // Double RAF ensures DOM is fully painted before scrolling
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (messagesContainer) {
+          messagesContainer.scrollTo({
+            top: messagesContainer.scrollHeight,
+            behavior: 'instant'
+          });
+        }
+      });
+    });
   }
   
   async function handleSend(e: CustomEvent<{ message: string; images: string[] }>) {

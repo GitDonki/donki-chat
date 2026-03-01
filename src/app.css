@@ -1,18 +1,6 @@
 @import "tailwindcss";
 
-@theme {
-  /* Base Colors - will be overridden by theme */
-  --color-bg-primary: #0f0f0f;
-  --color-bg-secondary: #1a1a1a;
-  --color-bg-tertiary: #252525;
-  --color-text-primary: #e5e5e5;
-  --color-text-secondary: #a3a3a3;
-  --color-accent: #6366f1;
-  --color-accent-hover: #818cf8;
-  --color-border: #2e2e2e;
-}
-
-/* Dark Theme (default) */
+/* Dark Theme (default) - must be defined before @theme */
 :root,
 :root.dark,
 [data-theme="dark"] {
@@ -40,6 +28,18 @@
   --accent-hover: #6366f1;
   --border: #d4d4d4;
   color-scheme: light;
+}
+
+@theme {
+  /* Base Colors - reference dynamic CSS variables */
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-border: var(--border);
 }
 
 html {
