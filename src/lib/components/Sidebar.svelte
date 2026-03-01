@@ -82,13 +82,16 @@
               <p class="truncate text-sm">{conv.title}</p>
               <p class="text-xs text-text-secondary">{formatDate(conv.updatedAt)}</p>
             </div>
-            <button
+            <span
+              role="button"
+              tabindex="0"
               on:click={(e) => deleteConversation(e, conv.id)}
-              class="p-1 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
+              on:keydown={(e) => e.key === 'Enter' && deleteConversation(e, conv.id)}
+              class="p-1 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity cursor-pointer"
               title="Löschen"
             >
               <Trash2 class="w-4 h-4" />
-            </button>
+            </span>
           </button>
         {/each}
       </div>
@@ -150,13 +153,16 @@
                   <p class="truncate text-sm">{conv.title}</p>
                   <p class="text-xs text-text-secondary">{formatDate(conv.updatedAt)}</p>
                 </div>
-                <button
+                <span
+                  role="button"
+                  tabindex="0"
                   on:click={(e) => deleteConversation(e, conv.id)}
-                  class="p-1 hover:text-red-400"
+                  on:keydown={(e) => e.key === 'Enter' && deleteConversation(e, conv.id)}
+                  class="p-1 hover:text-red-400 cursor-pointer"
                   title="Löschen"
                 >
                   <Trash2 class="w-4 h-4" />
-                </button>
+                </span>
               </button>
             {/each}
           </div>
