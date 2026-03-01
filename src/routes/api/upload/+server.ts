@@ -2,6 +2,13 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { saveUpload, getUploadFile } from '$lib/server/upload';
 
+// Increase body size limit to 10MB for file uploads
+export const config = {
+  body: {
+    limit: '10mb'
+  }
+};
+
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const formData = await request.formData();
