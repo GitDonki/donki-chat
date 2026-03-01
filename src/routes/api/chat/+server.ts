@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { v4 as uuid } from 'uuid';
-import { gateway } from '$lib/server/gateway-ws';
+import { gateway, type MultimodalContent } from '$lib/server/gateway-ws';
 import { 
   createConversation, 
   getConversation, 
@@ -8,6 +8,7 @@ import {
   getMessages,
   updateConversationTitle
 } from '$lib/server/db';
+import { getUploadAsBase64 } from '$lib/server/upload';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
@@ -172,9 +173,50 @@ export const POST: RequestHandler = async ({ request }) => {
           
           gateway.on('chat', chatHandler);
           
+          // Build message content - multimodal if images present
+          let messageContent: string | MultimodalContent[];
+          
+          if (images && images.length > 0) {
+            console.log('[Chat] Building multimodal message with', images.length, 'images');
+            const contentParts: MultimodalContent[] = [];
+            
+            // Add images first
+            for (const imageId of images) {
+              const imageData = await getUploadAsBase64(imageId);
+              if (imageData) {
+                console.log('[Chat] Adding image:', imageId, imageData.mimeType);
+                contentParts.push({
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    data: imageData.base64,
+                    media_type: imageData.mimeType
+                  }
+                });
+              } else {
+                console.warn('[Chat] Image not found:', imageId);
+              }
+            }
+            
+            // Add text message
+            if (message) {
+              contentParts.push({
+                type: 'text',
+                text: message
+              });
+            }
+            
+            messageContent = contentParts;
+          } else {
+            messageContent = message;
+          }
+          
           // Send message to main session
-          console.log('[Chat] Sending message to main session:', message.slice(0, 50));
-          const result = await gateway.sendMessage(message);
+          const msgPreview = typeof messageContent === 'string' 
+            ? messageContent.slice(0, 50) 
+            : `[${messageContent.length} parts]`;
+          console.log('[Chat] Sending message to main session:', msgPreview);
+          const result = await gateway.sendMessage(messageContent);
           runId = result.runId;
           console.log('[Chat] Got runId:', runId);
           

@@ -16,6 +16,22 @@ interface GatewayMessage {
   event?: string;
 }
 
+export interface ImageContent {
+  type: 'image';
+  source: {
+    type: 'base64';
+    data: string;
+    media_type: string;
+  };
+}
+
+export interface TextContent {
+  type: 'text';
+  text: string;
+}
+
+export type MultimodalContent = ImageContent | TextContent;
+
 class GatewayConnection extends EventEmitter {
   private ws: WebSocket | null = null;
   private connected = false;
@@ -174,7 +190,7 @@ class GatewayConnection extends EventEmitter {
     });
   }
 
-  async sendMessage(message: string): Promise<{ runId: string }> {
+  async sendMessage(message: string | MultimodalContent[]): Promise<{ runId: string }> {
     const idempotencyKey = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const result = await this.request('chat.send', {
       sessionKey: SESSION_KEY,
