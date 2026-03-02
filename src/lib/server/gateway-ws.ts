@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 
 const GATEWAY_URL = process.env.OPENCLAW_WS_URL || 'wss://192.168.0.155:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_TOKEN || '5239a6586070529b6e4973bcd58c3de5';
-const SESSION_KEY = 'agent:main:main';
+const DEFAULT_SESSION_KEY = 'agent:main:main';
 
 interface GatewayMessage {
   type: 'req' | 'res' | 'event';
@@ -181,10 +181,11 @@ class GatewayConnection extends EventEmitter {
     });
   }
 
-  async sendMessage(message: string, attachments?: ImageAttachment[]): Promise<{ runId: string }> {
+  async sendMessage(message: string, attachments?: ImageAttachment[], agentId?: string): Promise<{ runId: string }> {
+    const sessionKey = agentId ? `agent:${agentId}:main` : DEFAULT_SESSION_KEY;
     const idempotencyKey = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const params: Record<string, unknown> = {
-      sessionKey: SESSION_KEY,
+      sessionKey,
       message,
       idempotencyKey,
       deliver: false
@@ -195,27 +196,39 @@ class GatewayConnection extends EventEmitter {
       params.attachments = attachments;
     }
     
+    console.log('[Gateway] Sending message to session:', sessionKey);
     const result = await this.request('chat.send', params);
     return result as { runId: string };
   }
 
-  async getHistory(limit = 50): Promise<unknown[]> {
+  async getHistory(limit = 50, agentId?: string): Promise<unknown[]> {
+    const sessionKey = agentId ? `agent:${agentId}:main` : DEFAULT_SESSION_KEY;
     const result = await this.request('chat.history', {
-      sessionKey: SESSION_KEY,
+      sessionKey,
       limit
     });
     return (result as { messages: unknown[] }).messages || [];
   }
 
   /**
+   * Get health/status info from gateway
+   */
+  async getStatus(): Promise<unknown> {
+    const result = await this.request('health', {});
+    return result;
+  }
+
+  /**
    * Send a reaction event to the gateway
    * Format: { type: "reaction", messageId: "...", emoji: "👍" }
    */
-  sendReaction(messageId: string, emoji: string): void {
+  sendReaction(messageId: string, emoji: string, agentId?: string): void {
     if (!this.connected || !this.ws) {
       console.warn('[Gateway] Cannot send reaction - not connected');
       return;
     }
+    
+    const sessionKey = agentId ? `agent:${agentId}:main` : DEFAULT_SESSION_KEY;
     
     // Send as an event (fire and forget, no response expected)
     this.sendRaw({
@@ -225,7 +238,7 @@ class GatewayConnection extends EventEmitter {
         type: 'reaction',
         messageId,
         emoji,
-        sessionKey: SESSION_KEY,
+        sessionKey,
         timestamp: Date.now()
       }
     } as any);

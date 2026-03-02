@@ -9,6 +9,17 @@ export const db = new Database(dbPath);
 // Enable WAL mode for better concurrent access
 db.pragma('journal_mode = WAL');
 
+// Team agents configuration
+export const TEAM_AGENTS = [
+  { id: 'main', name: 'Donki', emoji: '🐧', role: 'Chef', sessionKey: 'agent:main:main', isDefault: true },
+  { id: 'nabu', name: 'Nabu', emoji: '🦉', role: 'Home Assistant', sessionKey: 'agent:nabu:main', isDefault: false },
+  { id: 'forge', name: 'Forge', emoji: '🔧', role: 'Infrastructure', sessionKey: 'agent:forge:main', isDefault: false },
+  { id: 'claude', name: 'Claude', emoji: '💻', role: 'Coding', sessionKey: 'agent:claude:main', isDefault: false },
+  { id: 'archie', name: 'Archie', emoji: '🐹', role: 'Archivar', sessionKey: 'agent:archie:main', isDefault: false }
+] as const;
+
+export type AgentId = typeof TEAM_AGENTS[number]['id'];
+
 // Initialize schema
 export function initializeDatabase() {
   db.exec(`
@@ -16,6 +27,7 @@ export function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
       title TEXT,
+      agent_id TEXT DEFAULT 'main',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -52,6 +64,7 @@ export function initializeDatabase() {
     -- Indexes
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations(agent_id);
   `);
   
   // Safe migration for existing databases - add reactions column if not exists
@@ -60,6 +73,44 @@ export function initializeDatabase() {
   } catch (e) {
     // Column already exists, ignore
   }
+  
+  // Migration: Add agent_id column if not exists
+  try {
+    db.exec(`ALTER TABLE conversations ADD COLUMN agent_id TEXT DEFAULT 'main'`);
+    console.log('[DB] Added agent_id column to conversations');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  
+  // Ensure all team agents have their default conversations
+  ensureAgentConversations();
+}
+
+// Ensure each agent has a dedicated conversation
+export function ensureAgentConversations() {
+  for (const agent of TEAM_AGENTS) {
+    const convId = `conv_${agent.id}`;
+    const existing = db.prepare('SELECT id FROM conversations WHERE id = ?').get(convId);
+    
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO conversations (id, agent_id, title, created_at, updated_at)
+        VALUES (?, ?, ?, datetime('now'), datetime('now'))
+      `).run(convId, agent.id, `Chat mit ${agent.name}`);
+      console.log(`[DB] Created conversation for agent ${agent.id}: ${convId}`);
+    }
+  }
+}
+
+// Get agent info by ID
+export function getAgentById(agentId: string) {
+  return TEAM_AGENTS.find(a => a.id === agentId);
+}
+
+// Get conversation for a specific agent
+export function getAgentConversation(agentId: string) {
+  const convId = `conv_${agentId}`;
+  return db.prepare('SELECT * FROM conversations WHERE id = ?').get(convId);
 }
 
 // Initialize on import
