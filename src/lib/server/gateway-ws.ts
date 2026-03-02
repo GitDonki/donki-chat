@@ -223,7 +223,6 @@ class GatewayConnection extends EventEmitter {
    */
   async getSessionStatus(sessionKey: string): Promise<unknown> {
     const result = await this.request('sessions.list', { 
-      activeMinutes: 0,  // Include all
       limit: 100
     }) as { sessions?: Array<{ key: string; model?: string; startedAt?: number; usage?: { inputTokens?: number; outputTokens?: number }; cost?: number; turnCount?: number }> };
     
