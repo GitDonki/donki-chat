@@ -132,13 +132,22 @@ export async function loadAgentHistory(agentId: string): Promise<void> {
           console.warn('[Chat] Skipping duplicate message ID:', id);
           continue;
         }
+        
+        // Extract content
+        const content = typeof m.content === 'string' ? m.content : 
+          Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '';
+        
+        // Skip system notifications (exec completions etc.)
+        if (content.trim().startsWith('System: [')) {
+          continue;
+        }
+        
         seenIds.add(id);
         
         loadedMessages.push({
           id,
           role: m.role,
-          content: typeof m.content === 'string' ? m.content : 
-            Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '',
+          content,
           images: m.images ? (typeof m.images === 'string' ? JSON.parse(m.images) : m.images) : undefined,
           reactions: m.reactions ? (typeof m.reactions === 'string' ? JSON.parse(m.reactions) : m.reactions) : undefined,
           createdAt: new Date(m.created_at || m.timestamp || Date.now()),

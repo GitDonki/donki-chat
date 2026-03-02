@@ -65,8 +65,10 @@ async function syncMissingMessages(agentId: string): Promise<void> {
       const contentHash = `${msg.role}:${content.slice(0, 100)}`;
       if (currentContentHashes.has(contentHash)) continue;
       
-      // Skip meta responses
-      if (content.trim() === 'NO_REPLY' || content.trim() === 'HEARTBEAT_OK') continue;
+      // Skip meta responses and system notifications
+      const trimmed = content.trim();
+      if (trimmed === 'NO_REPLY' || trimmed === 'HEARTBEAT_OK') continue;
+      if (trimmed.startsWith('System: [')) continue; // Exec completion notifications
       
       const messageId = msg.id || `sync-${hashContent(msg.role + ':' + content)}`;
       
