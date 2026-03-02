@@ -117,6 +117,21 @@ export function getMessage(id: string) {
   return stmt.get(id) as { id: string; reactions: string | null } | undefined;
 }
 
+// Find message by content (for deduplication)
+export function getMessageByContent(role: string, content: string, conversationId?: string) {
+  // Use content prefix for matching (first 200 chars)
+  const contentPrefix = content.slice(0, 200);
+  
+  let stmt;
+  if (conversationId) {
+    stmt = db.prepare('SELECT * FROM messages WHERE role = ? AND content LIKE ? AND conversation_id = ? LIMIT 1');
+    return stmt.get(role, contentPrefix + '%', conversationId) as { id: string; content: string; role: string; reactions: string | null } | undefined;
+  } else {
+    stmt = db.prepare('SELECT * FROM messages WHERE role = ? AND content LIKE ? LIMIT 1');
+    return stmt.get(role, contentPrefix + '%') as { id: string; content: string; role: string; reactions: string | null } | undefined;
+  }
+}
+
 export function toggleReaction(messageId: string, emoji: string): string[] {
   const message = getMessage(messageId);
   if (!message) return [];

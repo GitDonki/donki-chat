@@ -66,13 +66,30 @@
             );
             
             if (!exists) {
+              // Use gateway ID or generate stable ID from content
+              const messageId = msg.id || payload.runId || `gw-${hashContent('assistant:' + content)}`;
+              
               const newMessage: ChatMessageType = {
-                id: msg.id || payload.runId || crypto.randomUUID(),
+                id: messageId,
                 role: 'assistant',
                 content,
                 createdAt: new Date(msg.timestamp || payload.ts || Date.now()),
                 isStreaming: false
               };
+              
+              // Sync to DB so reactions work
+              try {
+                await fetch('/api/chat/history', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    messages: [{ id: messageId, role: 'assistant', content }],
+                    conversationId
+                  })
+                });
+              } catch (syncErr) {
+                console.warn('[Events] DB sync failed:', syncErr);
+              }
               
               messages.addMessage(newMessage);
               await scrollToBottom();
@@ -99,14 +116,22 @@
         // Transform gateway messages to our format
         const gatewayMessages = data.messages
           .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-          .map((m: any) => ({
-            id: m.id || crypto.randomUUID(),
-            role: m.role,
-            content: typeof m.content === 'string' ? m.content : 
-              Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '',
-            createdAt: new Date(m.timestamp || m.createdAt || Date.now()),
-            isStreaming: false
-          }));
+          .map((m: any) => {
+            // Extract content
+            const content = typeof m.content === 'string' ? m.content : 
+              Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '';
+            
+            // IMPORTANT: Use gateway ID if available, generate stable ID from content hash otherwise
+            const id = m.id || `gw-${hashContent(m.role + ':' + content)}`;
+            
+            return {
+              id,
+              role: m.role,
+              content,
+              createdAt: new Date(m.timestamp || m.createdAt || Date.now()),
+              isStreaming: false
+            };
+          });
         
         // Merge with existing messages (avoid duplicates by content hash)
         const currentMessages = $messages;
@@ -117,8 +142,33 @@
         );
         
         if (newMessages.length > 0) {
+          // Sync new messages to DB so reactions work - get ID mapping back
+          let idMap: Record<string, string> = {};
+          try {
+            const syncResponse = await fetch('/api/chat/history', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                messages: newMessages,
+                conversationId: conversationId
+              })
+            });
+            const syncData = await syncResponse.json();
+            if (syncData.ok && syncData.idMap) {
+              idMap = syncData.idMap;
+            }
+          } catch (syncErr) {
+            console.warn('[HistorySync] DB sync failed:', syncErr);
+          }
+          
+          // Update message IDs to use DB IDs (for reactions to work)
+          const messagesWithDbIds = newMessages.map((m: any) => ({
+            ...m,
+            id: idMap[m.id] || m.id // Use DB ID if available
+          }));
+          
           // Prepend gateway messages that we don't have locally
-          const merged = [...newMessages, ...currentMessages].sort(
+          const merged = [...messagesWithDbIds, ...currentMessages].sort(
             (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           );
           messages.set(merged);
@@ -128,6 +178,17 @@
     } catch (e) {
       console.warn('[HistorySync] Failed to sync gateway history:', e);
     }
+  }
+  
+  // Simple hash function for generating stable IDs from content
+  function hashContent(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(36);
   }
   
   async function startNewConversation() {
