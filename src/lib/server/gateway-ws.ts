@@ -207,6 +207,32 @@ class GatewayConnection extends EventEmitter {
     return (result as { messages: unknown[] }).messages || [];
   }
 
+  /**
+   * Send a reaction event to the gateway
+   * Format: { type: "reaction", messageId: "...", emoji: "👍" }
+   */
+  sendReaction(messageId: string, emoji: string): void {
+    if (!this.connected || !this.ws) {
+      console.warn('[Gateway] Cannot send reaction - not connected');
+      return;
+    }
+    
+    // Send as an event (fire and forget, no response expected)
+    this.sendRaw({
+      type: 'event',
+      event: 'reaction',
+      payload: {
+        type: 'reaction',
+        messageId,
+        emoji,
+        sessionKey: SESSION_KEY,
+        timestamp: Date.now()
+      }
+    } as any);
+    
+    console.log('[Gateway] Sent reaction:', messageId, emoji);
+  }
+
   isConnected(): boolean {
     return this.connected;
   }

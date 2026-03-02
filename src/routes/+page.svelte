@@ -77,14 +77,13 @@
                 isStreaming: false
               };
               
-              // Sync to DB so reactions work
+              // Sync to DB so reactions work (no conversationId - uses gateway-sync)
               try {
                 await fetch('/api/chat/history', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ 
-                    messages: [{ id: messageId, role: 'assistant', content }],
-                    conversationId
+                    messages: [{ id: messageId, role: 'assistant', content }]
                   })
                 });
               } catch (syncErr) {
@@ -143,15 +142,13 @@
         
         if (newMessages.length > 0) {
           // Sync new messages to DB so reactions work - get ID mapping back
+          // NOTE: Don't pass conversationId - server always uses dedicated gateway-sync conversation
           let idMap: Record<string, string> = {};
           try {
             const syncResponse = await fetch('/api/chat/history', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                messages: newMessages,
-                conversationId: conversationId
-              })
+              body: JSON.stringify({ messages: newMessages })
             });
             const syncData = await syncResponse.json();
             if (syncData.ok && syncData.idMap) {
@@ -194,17 +191,39 @@
   async function startNewConversation() {
     messages.clear();
     conversationId = crypto.randomUUID();
+    const title = 'Neuer Chat';
+    
+    // Create conversation in both store AND database
     currentConversation.set({
       id: conversationId,
-      title: 'Neuer Chat',
+      title,
       createdAt: new Date(),
       updatedAt: new Date()
     });
+    
+    // Persist to database so it can be loaded later
+    try {
+      await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: conversationId, title })
+      });
+    } catch (e) {
+      console.warn('[NewConversation] Failed to persist:', e);
+    }
   }
   
   async function loadConversation(id: string) {
     try {
       const response = await fetch(`/api/conversations/${id}`);
+      
+      if (response.status === 404) {
+        // Conversation doesn't exist in DB - start fresh instead of showing error
+        console.warn('[LoadConversation] Not found, starting new chat');
+        await startNewConversation();
+        return;
+      }
+      
       if (!response.ok) throw new Error('Failed to load conversation');
       
       const data = await response.json();
@@ -217,20 +236,23 @@
         updatedAt: new Date(data.conversation.updated_at)
       });
       
-      // Load messages
+      // Load messages - handle both parsed and unparsed JSON
       messages.set(data.messages.map((m: any) => ({
         id: m.id,
         role: m.role,
         content: m.content,
-        images: m.images ? JSON.parse(m.images) : undefined,
-        reactions: m.reactions ? JSON.parse(m.reactions) : undefined,
+        images: m.images ? (typeof m.images === 'string' ? JSON.parse(m.images) : m.images) : undefined,
+        reactions: m.reactions ? (typeof m.reactions === 'string' ? JSON.parse(m.reactions) : m.reactions) : undefined,
         createdAt: new Date(m.created_at),
         isStreaming: false
       })));
       
       await scrollToBottom();
     } catch (e) {
+      console.error('[LoadConversation] Error:', e);
       error.set('Fehler beim Laden des Chats');
+      // Clear error after 3 seconds
+      setTimeout(() => error.set(null), 3000);
     }
   }
   

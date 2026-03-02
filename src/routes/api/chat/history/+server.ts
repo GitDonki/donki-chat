@@ -33,6 +33,8 @@ export const GET: RequestHandler = async ({ url }) => {
 
 // POST: Sync gateway messages to local DB so reactions can work
 // Returns mapping of originalId -> dbId for frontend to use correct IDs
+// NOTE: Gateway messages always go to the dedicated gateway-sync conversation
+// to prevent creating multiple "Gateway Chat" entries in sidebar
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const { messages, conversationId } = await request.json();
@@ -41,9 +43,11 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ ok: false, error: 'messages array required' }, { status: 400 });
     }
     
-    const targetConversationId = conversationId || GATEWAY_CONVERSATION_ID;
+    // ALWAYS use the dedicated gateway conversation for synced messages
+    // The conversationId param is only used to check if messages already exist there
+    const targetConversationId = GATEWAY_CONVERSATION_ID;
     
-    // Ensure conversation exists
+    // Ensure the ONE gateway conversation exists (only create once)
     if (!getConversation(targetConversationId)) {
       createConversation(targetConversationId, 'Gateway Chat');
     }
