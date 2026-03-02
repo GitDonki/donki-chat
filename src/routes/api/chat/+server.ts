@@ -76,6 +76,7 @@ export const POST: RequestHandler = async ({ request }) => {
           // Set up listener for chat events BEFORE sending
           let runId: string | null = null;
           let resolved = false;
+          let lastKnownText = ''; // Track cumulative text to compute deltas
           
           const chatHandler = async (payload: any) => {
             // Skip if already resolved or controller closed
@@ -90,11 +91,52 @@ export const POST: RequestHandler = async ({ request }) => {
             }
             
             // Handle different event types
-            if (payload.delta) {
-              console.log('[ChatHandler] Delta:', payload.delta.slice(0, 50));
-              fullResponse += payload.delta;
+            // Gateway sends cumulative text in message.content, not incremental deltas
+            // We need to compute the delta ourselves
+            let delta = '';
+            
+            if (payload.message?.content) {
+              // Extract text from content array
+              const content = payload.message.content;
+              let currentText = '';
+              if (Array.isArray(content)) {
+                currentText = content
+                  .filter((c: any) => c.type === 'text')
+                  .map((c: any) => c.text || '')
+                  .join('');
+              } else if (typeof content === 'string') {
+                currentText = content;
+              }
+              
+              // Compute delta: what's new since last known text
+              if (currentText.startsWith(lastKnownText)) {
+                // Normal case: text was appended
+                delta = currentText.slice(lastKnownText.length);
+              } else if (currentText.length > 0) {
+                // Text was replaced/reset (happens after tool calls)
+                // Append the new text with a separator
+                if (lastKnownText.length > 0) {
+                  console.log('[ChatHandler] Text reset detected, appending new segment');
+                  delta = '\n\n' + currentText;
+                } else {
+                  delta = currentText;
+                }
+              }
+              
+              if (delta) {
+                lastKnownText = currentText;
+              }
+            } else if (payload.delta) {
+              // Fallback: direct delta field (some events have this)
+              delta = payload.delta;
+              lastKnownText += delta;
+            }
+            
+            if (delta) {
+              console.log('[ChatHandler] Delta:', delta.slice(0, 50));
+              fullResponse += delta;
               try {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'delta', content: payload.delta })}\n\n`));
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'delta', content: delta })}\n\n`));
               } catch { /* controller closed */ }
             }
             
