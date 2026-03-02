@@ -20,6 +20,25 @@ export const TEAM_AGENTS = [
 
 export type AgentId = typeof TEAM_AGENTS[number]['id'];
 
+// Database row types
+export interface ConversationRow {
+  id: string;
+  title: string;
+  agent_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageRow {
+  id: string;
+  conversation_id: string;
+  role: string;
+  content: string;
+  images: string | null;
+  reactions: string | null;
+  created_at: string;
+}
+
 // Initialize schema
 export function initializeDatabase() {
   db.exec(`
@@ -108,9 +127,9 @@ export function getAgentById(agentId: string) {
 }
 
 // Get conversation for a specific agent
-export function getAgentConversation(agentId: string) {
+export function getAgentConversation(agentId: string): ConversationRow | undefined {
   const convId = `conv_${agentId}`;
-  return db.prepare('SELECT * FROM conversations WHERE id = ?').get(convId);
+  return db.prepare('SELECT * FROM conversations WHERE id = ?').get(convId) as ConversationRow | undefined;
 }
 
 // Initialize on import
@@ -122,9 +141,9 @@ export function createConversation(id: string, title?: string) {
   return stmt.run(id, title || 'New Chat');
 }
 
-export function getConversation(id: string) {
+export function getConversation(id: string): ConversationRow | undefined {
   const stmt = db.prepare('SELECT * FROM conversations WHERE id = ?');
-  return stmt.get(id);
+  return stmt.get(id) as ConversationRow | undefined;
 }
 
 export function updateConversationTitle(id: string, title: string) {
@@ -153,9 +172,9 @@ export function addMessage(id: string, conversationId: string, role: string, con
   return result;
 }
 
-export function getMessages(conversationId: string) {
+export function getMessages(conversationId: string): MessageRow[] {
   const stmt = db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC');
-  return stmt.all(conversationId);
+  return stmt.all(conversationId) as MessageRow[];
 }
 
 export function deleteMessages(conversationId: string) {

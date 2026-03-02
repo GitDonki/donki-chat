@@ -113,7 +113,7 @@ export const POST: RequestHandler = async ({ request }) => {
                 // Find the last assistant message
                 const lastAssistant = [...historyMessages].reverse().find((m: any) => 
                   m.role === 'assistant'
-                );
+                ) as { role: string; content: string | Array<{ type: string; text: string }> } | undefined;
                 
                 if (lastAssistant && !fullResponse) {
                   // Extract text content
