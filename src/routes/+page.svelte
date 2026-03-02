@@ -29,9 +29,7 @@
     // Load team and select Donki by default
     await loadTeam();
     await selectAgent('main');
-    
-    // Connect SSE for initial agent
-    connectSSE('main');
+    // Note: SSE connection happens automatically via selectedAgentId.subscribe in sse.ts
   });
   
   onDestroy(() => {

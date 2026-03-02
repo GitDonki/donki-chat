@@ -116,6 +116,13 @@ function handleChatEvent(payload: any, agentId: string): void {
     if (!exists) {
       const messageId = msg.id || payload.runId || `sse-${hashContent('assistant:' + content)}`;
       
+      // Also check for ID collision
+      const idExists = currentMessages.some(m => m.id === messageId);
+      if (idExists) {
+        console.warn('[SSE] Skipping message with duplicate ID:', messageId);
+        return;
+      }
+      
       const newMessage: ChatMessage = {
         id: messageId,
         role: 'assistant',

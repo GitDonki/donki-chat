@@ -121,16 +121,29 @@ export async function loadAgentHistory(agentId: string): Promise<void> {
     const data = await response.json();
     
     if (data.ok && data.messages) {
-      const loadedMessages: ChatMessage[] = data.messages.map((m: any) => ({
-        id: m.id,
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : 
-          Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '',
-        images: m.images ? (typeof m.images === 'string' ? JSON.parse(m.images) : m.images) : undefined,
-        reactions: m.reactions ? (typeof m.reactions === 'string' ? JSON.parse(m.reactions) : m.reactions) : undefined,
-        createdAt: new Date(m.created_at || m.timestamp || Date.now()),
-        isStreaming: false
-      }));
+      // Deduplicate messages by ID
+      const seenIds = new Set<string>();
+      const loadedMessages: ChatMessage[] = [];
+      
+      for (const m of data.messages) {
+        const id = m.id || crypto.randomUUID();
+        if (seenIds.has(id)) {
+          console.warn('[Chat] Skipping duplicate message ID:', id);
+          continue;
+        }
+        seenIds.add(id);
+        
+        loadedMessages.push({
+          id,
+          role: m.role,
+          content: typeof m.content === 'string' ? m.content : 
+            Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '',
+          images: m.images ? (typeof m.images === 'string' ? JSON.parse(m.images) : m.images) : undefined,
+          reactions: m.reactions ? (typeof m.reactions === 'string' ? JSON.parse(m.reactions) : m.reactions) : undefined,
+          createdAt: new Date(m.created_at || m.timestamp || Date.now()),
+          isStreaming: false
+        });
+      }
       
       messages.set(loadedMessages);
       
