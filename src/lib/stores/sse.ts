@@ -28,6 +28,92 @@ function hashContent(str: string): string {
   return Math.abs(hash).toString(36);
 }
 
+// Sync missing messages from gateway on (re)connect
+async function syncMissingMessages(agentId: string): Promise<void> {
+  try {
+    console.log('[SSE] Syncing missing messages for agent:', agentId);
+    
+    // Fetch recent history from gateway (source=gateway forces fresh fetch)
+    const response = await fetch(`/api/chat/history?agent=${agentId}&source=gateway&limit=20`);
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    if (!data.ok || !data.messages) return;
+    
+    const currentMessages = get(messages);
+    const currentContentHashes = new Set(
+      currentMessages.map(m => `${m.role}:${m.content.slice(0, 100)}`)
+    );
+    
+    const missingMessages: ChatMessage[] = [];
+    
+    for (const msg of data.messages) {
+      // Extract content
+      let content = '';
+      if (typeof msg.content === 'string') {
+        content = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        content = msg.content
+          .filter((c: any) => c.type === 'text')
+          .map((c: any) => c.text || '')
+          .join('');
+      }
+      
+      if (!content.trim()) continue;
+      
+      // Skip if already exists (content-based check)
+      const contentHash = `${msg.role}:${content.slice(0, 100)}`;
+      if (currentContentHashes.has(contentHash)) continue;
+      
+      // Skip meta responses
+      if (content.trim() === 'NO_REPLY' || content.trim() === 'HEARTBEAT_OK') continue;
+      
+      const messageId = msg.id || `sync-${hashContent(msg.role + ':' + content)}`;
+      
+      missingMessages.push({
+        id: messageId,
+        role: msg.role,
+        content,
+        createdAt: new Date(msg.timestamp || Date.now()),
+        isStreaming: false
+      });
+      
+      currentContentHashes.add(contentHash);
+    }
+    
+    if (missingMessages.length > 0) {
+      console.log('[SSE] Found', missingMessages.length, 'missing messages to sync');
+      
+      // Sort by timestamp and add to store
+      missingMessages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      
+      for (const msg of missingMessages) {
+        messages.addMessage(msg);
+      }
+      
+      // Sync to DB
+      await fetch('/api/chat/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: missingMessages.map(m => ({ 
+            id: m.id, 
+            role: m.role, 
+            content: m.content 
+          })),
+          agentId
+        })
+      });
+      
+      console.log('[SSE] Synced missing messages to DB');
+    } else {
+      console.log('[SSE] No missing messages found');
+    }
+  } catch (e) {
+    console.warn('[SSE] Sync failed:', e);
+  }
+}
+
 // Connect to SSE for a specific agent
 export function connectSSE(agentId: string): void {
   // Clear any pending reconnect
@@ -53,6 +139,9 @@ export function connectSSE(agentId: string): void {
     console.log('[SSE] Connected for agent:', agentId);
     sseConnected.set(true);
     updateMemberStatus(agentId, 'active');
+    
+    // Sync any messages that arrived while disconnected
+    syncMissingMessages(agentId);
   };
   
   currentEventSource.onmessage = async (event) => {
