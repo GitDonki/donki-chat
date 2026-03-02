@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { selectedAgentId, type TeamMember } from './team';
+import { trackRunId } from './sse';
 
 export interface ChatMessage {
   id: string;
@@ -255,6 +256,9 @@ export async function sendMessageToAgent(
             
             if (event.type === 'runId') {
               runId = event.runId;
+              // IMPORTANT: Track runId IMMEDIATELY to prevent duplicates from SSE
+              // SSE events can arrive before this function returns
+              trackRunId(runId);
             } else if (event.type === 'delta' && event.content) {
               messages.appendToMessage(assistantMessageId, event.content);
               onDelta?.(event.content);

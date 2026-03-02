@@ -97,7 +97,6 @@ export function initializeDatabase() {
     -- Indexes
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
-    CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations(agent_id);
   `);
   
   // Safe migration for existing databases - add reactions column if not exists
@@ -113,6 +112,13 @@ export function initializeDatabase() {
     console.log('[DB] Added agent_id column to conversations');
   } catch (e) {
     // Column already exists, ignore
+  }
+  
+  // Create agent index AFTER migration ensures column exists
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations(agent_id)`);
+  } catch (e) {
+    // Index already exists or column doesn't exist yet (shouldn't happen)
   }
   
   // Ensure all team agents have their default conversations
