@@ -224,7 +224,13 @@ class GatewayConnection extends EventEmitter {
   async getSessionStatus(sessionKey: string): Promise<unknown> {
     const result = await this.request('sessions.list', { 
       limit: 100
-    }) as { sessions?: Array<{ key: string; model?: string; startedAt?: number; usage?: { inputTokens?: number; outputTokens?: number }; cost?: number; turnCount?: number }> };
+    }) as { sessions?: Array<{ 
+      key: string; 
+      model?: string; 
+      updatedAt?: number; 
+      totalTokens?: number;
+      contextTokens?: number;
+    }> };
     
     // Find matching session
     const sessions = result.sessions || [];
@@ -235,13 +241,10 @@ class GatewayConnection extends EventEmitter {
     }
     
     return {
-      model: session.model,
-      sessionStart: session.startedAt ? new Date(session.startedAt).toISOString() : undefined,
-      inputTokens: session.usage?.inputTokens,
-      outputTokens: session.usage?.outputTokens,
-      totalTokens: (session.usage?.inputTokens || 0) + (session.usage?.outputTokens || 0),
-      cost: session.cost,
-      turnCount: session.turnCount
+      model: session.model ? `anthropic/${session.model}` : undefined,
+      lastActive: session.updatedAt ? new Date(session.updatedAt).toISOString() : undefined,
+      totalTokens: session.totalTokens || 0,
+      contextTokens: session.contextTokens || 0
     };
   }
 

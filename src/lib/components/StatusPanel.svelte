@@ -1,16 +1,13 @@
 <script lang="ts">
-  import { RefreshCw, Activity, Clock, Zap, DollarSign } from 'lucide-svelte';
+  import { RefreshCw, Activity, Clock, Zap } from 'lucide-svelte';
   import { selectedAgentId } from '$lib/stores/team';
   
   interface SessionStatus {
     model?: string;
-    sessionStart?: string;
-    inputTokens?: number;
-    outputTokens?: number;
+    lastActive?: string;
     totalTokens?: number;
-    cost?: number;
-    turnCount?: number;
-    reasoning?: string;
+    contextTokens?: number;
+    error?: string;
   }
   
   let status: SessionStatus | null = null;
@@ -42,20 +39,17 @@
     return n.toString();
   }
   
-  function formatCost(cost: number | undefined): string {
-    if (!cost) return '$0.00';
-    return '$' + cost.toFixed(4);
-  }
-  
-  function formatDuration(startTime: string | undefined): string {
-    if (!startTime) return '-';
-    const start = new Date(startTime);
+  function formatLastActive(time: string | undefined): string {
+    if (!time) return '-';
+    const date = new Date(time);
     const now = new Date();
-    const diffMs = now.getTime() - start.getTime();
+    const diffMs = now.getTime() - date.getTime();
     const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'gerade eben';
+    if (mins < 60) return `vor ${mins}m`;
     const hours = Math.floor(mins / 60);
-    if (hours > 0) return `${hours}h ${mins % 60}m`;
-    return `${mins}m`;
+    if (hours < 24) return `vor ${hours}h`;
+    return date.toLocaleDateString('de-DE');
   }
   
   function getModelShort(model: string | undefined): string {
@@ -99,6 +93,8 @@
       </div>
     {:else if error}
       <p class="text-xs text-red-400 text-center py-2">{error}</p>
+    {:else if status?.error}
+      <p class="text-xs text-red-400 text-center py-2">{status.error}</p>
     {:else if status}
       <div class="space-y-3">
         <!-- Model -->
@@ -107,49 +103,31 @@
           <span class="text-xs font-medium text-text-primary">{getModelShort(status.model)}</span>
         </div>
         
-        <!-- Session Duration -->
+        <!-- Last Active -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-text-secondary flex items-center gap-1">
-            <Clock class="w-3 h-3" /> Laufzeit
+            <Clock class="w-3 h-3" /> Aktiv
           </span>
-          <span class="text-xs font-medium text-text-primary">{formatDuration(status.sessionStart)}</span>
+          <span class="text-xs font-medium text-text-primary">{formatLastActive(status.lastActive)}</span>
         </div>
         
-        <!-- Tokens -->
+        <!-- Total Tokens -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-text-secondary flex items-center gap-1">
             <Zap class="w-3 h-3" /> Tokens
           </span>
           <span class="text-xs font-medium text-text-primary">
-            {formatTokens(status.inputTokens)} / {formatTokens(status.outputTokens)}
+            {formatTokens(status.totalTokens)}
           </span>
         </div>
         
-        <!-- Cost -->
-        {#if status.cost !== undefined}
+        <!-- Context -->
         <div class="flex items-center justify-between">
-          <span class="text-xs text-text-secondary flex items-center gap-1">
-            <DollarSign class="w-3 h-3" /> Kosten
+          <span class="text-xs text-text-secondary">Context</span>
+          <span class="text-xs font-medium text-text-primary">
+            {formatTokens(status.contextTokens)}
           </span>
-          <span class="text-xs font-medium text-green-400">{formatCost(status.cost)}</span>
         </div>
-        {/if}
-        
-        <!-- Turns -->
-        {#if status.turnCount}
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-text-secondary">Turns</span>
-          <span class="text-xs font-medium text-text-primary">{status.turnCount}</span>
-        </div>
-        {/if}
-        
-        <!-- Reasoning -->
-        {#if status.reasoning}
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-text-secondary">Reasoning</span>
-          <span class="text-xs font-medium text-accent">{status.reasoning}</span>
-        </div>
-        {/if}
       </div>
     {:else}
       <p class="text-xs text-text-secondary text-center py-2">Keine Daten</p>
