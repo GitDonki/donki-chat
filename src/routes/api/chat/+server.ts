@@ -6,13 +6,27 @@ import {
   getConversation, 
   addMessage, 
   getMessages,
-  updateConversationTitle
+  updateConversationTitle,
+  TEAM_AGENTS,
+  getAgentById
 } from '$lib/server/db';
 import { getUploadAsBase64 } from '$lib/server/upload';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const { message, images, conversationId, userMessageId: clientUserMsgId, assistantMessageId: clientAssistantMsgId } = await request.json();
+    const { message, images, conversationId, agentId = 'main', userMessageId: clientUserMsgId, assistantMessageId: clientAssistantMsgId } = await request.json();
+    
+    // Validate agent
+    const agent = getAgentById(agentId);
+    if (!agent) {
+      return new Response(JSON.stringify({ error: 'Agent not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Use agent's dedicated conversation if no conversationId provided
+    const targetConversationId = conversationId || `conv_${agentId}`;
     
     if (!message && (!images || images.length === 0)) {
       return new Response(JSON.stringify({ error: 'Message or images required' }), {
@@ -22,17 +36,17 @@ export const POST: RequestHandler = async ({ request }) => {
     }
     
     // Ensure conversation exists
-    let conversation = getConversation(conversationId);
+    let conversation = getConversation(targetConversationId);
     if (!conversation) {
-      createConversation(conversationId, 'Neuer Chat');
+      createConversation(targetConversationId, `Chat mit ${agent.name}`);
     }
     
     // Use client-provided IDs if available (for reaction support), otherwise generate
     const userMessageId = clientUserMsgId || uuid();
-    addMessage(userMessageId, conversationId, 'user', message, images);
+    addMessage(userMessageId, targetConversationId, 'user', message, images);
     
     // Get conversation history for title update check
-    const history = getMessages(conversationId) as Array<{ role: string; content: string }>;
+    const history = getMessages(targetConversationId) as Array<{ role: string; content: string }>;
     
     // Create SSE stream
     const stream = new ReadableStream({
@@ -134,13 +148,13 @@ export const POST: RequestHandler = async ({ request }) => {
               // Use client-provided ID so frontend reactions work correctly
               if (!isMetaResponse && fullResponse.trim()) {
                 const assistantMessageId = clientAssistantMsgId || uuid();
-                addMessage(assistantMessageId, conversationId, 'assistant', fullResponse);
+                addMessage(assistantMessageId, targetConversationId, 'assistant', fullResponse);
               }
               
-              // Update conversation title if first exchange
-              if (history.length <= 1 && message) {
+              // Update conversation title if first exchange (skip for agent conversations)
+              if (history.length <= 1 && message && !targetConversationId.startsWith('conv_')) {
                 const title = message.length > 50 ? message.substring(0, 47) + '...' : message;
-                updateConversationTitle(conversationId, title);
+                updateConversationTitle(targetConversationId, title);
               }
               
               // Safe close - signal if it was a no-reply
@@ -196,11 +210,11 @@ export const POST: RequestHandler = async ({ request }) => {
             }
           }
           
-          // Send message to main session
+          // Send message to agent session
           const msgPreview = message ? message.slice(0, 50) : '(no text)';
           const attachmentInfo = attachments ? ` + ${attachments.length} images` : '';
-          console.log('[Chat] Sending message to main session:', msgPreview + attachmentInfo);
-          const result = await gateway.sendMessage(message || '', attachments);
+          console.log(`[Chat] Sending message to ${agent.name} (${agentId}):`, msgPreview + attachmentInfo);
+          const result = await gateway.sendMessage(message || '', attachments, agentId);
           runId = result.runId;
           console.log('[Chat] Got runId:', runId);
           
@@ -217,7 +231,7 @@ export const POST: RequestHandler = async ({ request }) => {
               if (fullResponse) {
                 // Save partial response - use client-provided ID for reaction support
                 const assistantMessageId = clientAssistantMsgId || uuid();
-                addMessage(assistantMessageId, conversationId, 'assistant', fullResponse);
+                addMessage(assistantMessageId, targetConversationId, 'assistant', fullResponse);
               }
               
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: 'Timeout' })}\n\n`));

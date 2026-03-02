@@ -1,9 +1,23 @@
 import type { RequestHandler } from './$types';
 import { gateway } from '$lib/server/gateway-ws';
+import { TEAM_AGENTS } from '$lib/server/db';
 
 // SSE endpoint for real-time chat events from the gateway
-// This allows the UI to receive messages that Donki sends in other channels
-export const GET: RequestHandler = async ({ request }) => {
+// Supports filtering by agent via ?agent=nabu query parameter
+export const GET: RequestHandler = async ({ request, url }) => {
+  const agentId = url.searchParams.get('agent') || 'main';
+  
+  // Validate agent
+  const agent = TEAM_AGENTS.find(a => a.id === agentId);
+  if (!agent) {
+    return new Response(JSON.stringify({ error: 'Agent not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  
+  const sessionKeyPrefix = `agent:${agentId}:`;
+  
   // Ensure gateway is connected
   if (!gateway.isConnected()) {
     try {
@@ -16,6 +30,14 @@ export const GET: RequestHandler = async ({ request }) => {
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
+      
+      // Send initial connected event
+      try {
+        const initData = JSON.stringify({ type: 'connected', agentId, sessionKey: agent.sessionKey });
+        controller.enqueue(encoder.encode(`data: ${initData}\n\n`));
+      } catch {
+        // Stream already closed
+      }
       
       // Send keepalive ping every 30s
       const keepalive = setInterval(() => {
@@ -30,7 +52,20 @@ export const GET: RequestHandler = async ({ request }) => {
       // Listen for chat events from gateway
       const onChat = (payload: unknown) => {
         try {
-          const data = JSON.stringify({ type: 'chat', payload });
+          const p = payload as any;
+          
+          // Filter events by session key if present
+          // Events may have sessionKey directly or nested in message
+          const eventSessionKey = p.sessionKey || p.message?.sessionKey || '';
+          
+          // If event has a session key, filter by agent
+          // Events without session key (like deltas) are passed through
+          if (eventSessionKey && !eventSessionKey.startsWith(sessionKeyPrefix)) {
+            // Event is for a different agent, skip
+            return;
+          }
+          
+          const data = JSON.stringify({ type: 'chat', payload, agentId });
           controller.enqueue(encoder.encode(`data: ${data}\n\n`));
         } catch (e) {
           console.error('[ChatEvents] Error sending event:', e);
@@ -56,7 +91,8 @@ export const GET: RequestHandler = async ({ request }) => {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
+      'Connection': 'keep-alive',
+      'X-Agent-Id': agentId
     }
   });
 };
