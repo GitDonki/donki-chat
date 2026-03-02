@@ -219,11 +219,31 @@ class GatewayConnection extends EventEmitter {
   }
 
   /**
-   * Get session status (usage, model, costs) for a specific session
+   * Get session info from sessions.list filtered by sessionKey
    */
   async getSessionStatus(sessionKey: string): Promise<unknown> {
-    const result = await this.request('session.status', { sessionKey });
-    return result;
+    const result = await this.request('sessions.list', { 
+      activeMinutes: 0,  // Include all
+      limit: 100
+    }) as { sessions?: Array<{ key: string; model?: string; startedAt?: number; usage?: { inputTokens?: number; outputTokens?: number }; cost?: number; turnCount?: number }> };
+    
+    // Find matching session
+    const sessions = result.sessions || [];
+    const session = sessions.find(s => s.key === sessionKey);
+    
+    if (!session) {
+      return { error: 'Session not found' };
+    }
+    
+    return {
+      model: session.model,
+      sessionStart: session.startedAt ? new Date(session.startedAt).toISOString() : undefined,
+      inputTokens: session.usage?.inputTokens,
+      outputTokens: session.usage?.outputTokens,
+      totalTokens: (session.usage?.inputTokens || 0) + (session.usage?.outputTokens || 0),
+      cost: session.cost,
+      turnCount: session.turnCount
+    };
   }
 
   /**
