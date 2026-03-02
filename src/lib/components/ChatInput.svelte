@@ -5,6 +5,7 @@
   
   export let disabled = false;
   export let isLoading = false;
+  export let placeholder = 'Nachricht schreiben...';
   
   const dispatch = createEventDispatcher<{
     send: { message: string; images: string[] };
@@ -167,7 +168,7 @@
         on:keydown={handleKeydown}
         on:input={handleInput}
         on:paste={handlePaste}
-        placeholder={isPasting ? "Bild wird hochgeladen..." : "Nachricht schreiben..."}
+        placeholder={isPasting ? "Bild wird hochgeladen..." : placeholder}
         rows="1"
         class="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2.5 sm:px-4 sm:py-3 resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-text-primary placeholder-text-secondary text-base"
         disabled={disabled || isLoading || isPasting}

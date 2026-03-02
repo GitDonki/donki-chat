@@ -9,6 +9,7 @@ import {
   createConversation,
   getAgentConversation,
   getMessages,
+  deleteMessages,
   TEAM_AGENTS
 } from '$lib/server/db';
 
@@ -134,6 +135,32 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ 
       ok: false, 
       error: error instanceof Error ? error.message : 'Sync failed' 
+    }, { status: 500 });
+  }
+};
+
+// DELETE: Clear messages for a specific agent
+export const DELETE: RequestHandler = async ({ url }) => {
+  const agentId = url.searchParams.get('agent') || 'main';
+  
+  // Validate agent
+  const agent = TEAM_AGENTS.find(a => a.id === agentId);
+  if (!agent) {
+    return json({ ok: false, error: 'Agent not found' }, { status: 404 });
+  }
+  
+  try {
+    const conversationId = `conv_${agentId}`;
+    deleteMessages(conversationId);
+    
+    console.log('[History] Cleared messages for agent:', agentId);
+    
+    return json({ ok: true, agentId });
+  } catch (error) {
+    console.error('[History] Delete error:', error);
+    return json({ 
+      ok: false, 
+      error: error instanceof Error ? error.message : 'Delete failed' 
     }, { status: 500 });
   }
 };
