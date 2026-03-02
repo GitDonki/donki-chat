@@ -263,7 +263,7 @@ export const POST: RequestHandler = async ({ request }) => {
           // Send runId to client so it can filter SSE events
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'runId', runId })}\n\n`));
           
-          // Timeout after 2 minutes
+          // Timeout after 10 minutes (long operations like docker builds)
           setTimeout(() => {
             if (!resolved) {
               resolved = true;
@@ -280,7 +280,7 @@ export const POST: RequestHandler = async ({ request }) => {
               controller.enqueue(encoder.encode('data: [DONE]\n\n'));
               controller.close();
             }
-          }, 120000);
+          }, 600000);
           
         } catch (error) {
           console.error('[Chat] Error:', error);
