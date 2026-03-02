@@ -219,6 +219,14 @@ class GatewayConnection extends EventEmitter {
   }
 
   /**
+   * Get session status (usage, model, costs) for a specific session
+   */
+  async getSessionStatus(sessionKey: string): Promise<unknown> {
+    const result = await this.request('session.status', { sessionKey });
+    return result;
+  }
+
+  /**
    * Send a reaction event to the gateway
    * Format: { type: "reaction", messageId: "...", emoji: "👍" }
    */
