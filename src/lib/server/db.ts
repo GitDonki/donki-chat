@@ -4,10 +4,24 @@ import { env } from '$env/dynamic/private';
 
 const dbPath = env.DATABASE_PATH || './data/chat.db';
 
-export const db = new Database(dbPath);
+// Lazy DB initialization to avoid build-time errors
+let _db: Database.Database | null = null;
 
-// Enable WAL mode for better concurrent access
-db.pragma('journal_mode = WAL');
+function getDb(): Database.Database {
+  if (!_db) {
+    _db = new Database(dbPath);
+    _db.pragma('journal_mode = WAL');
+    initializeDatabase();
+  }
+  return _db;
+}
+
+// Export getter for compatibility
+export const db = new Proxy({} as Database.Database, {
+  get(_, prop) {
+    return (getDb() as any)[prop];
+  }
+});
 
 // Team agents configuration
 export const TEAM_AGENTS = [
@@ -132,8 +146,14 @@ export function getAgentConversation(agentId: string): ConversationRow | undefin
   return db.prepare('SELECT * FROM conversations WHERE id = ?').get(convId) as ConversationRow | undefined;
 }
 
-// Initialize on import
-initializeDatabase();
+// Lazy initialization - only when actually used
+let initialized = false;
+export function ensureInitialized() {
+  if (!initialized) {
+    initializeDatabase();
+    initialized = true;
+  }
+}
 
 // Helper functions
 export function createConversation(id: string, title?: string) {
