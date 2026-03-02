@@ -5,6 +5,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   images?: string[];
+  reactions?: string[];
   createdAt: Date;
   isStreaming?: boolean;
 }

@@ -14,6 +14,64 @@
   let uploadedImages: { id: string; preview: string }[] = [];
   let textarea: HTMLTextAreaElement;
   let showUpload = false;
+  let isPasting = false;
+  
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+  
+  async function handlePaste(e: ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          await uploadPastedImage(file);
+        }
+        return;
+      }
+    }
+  }
+  
+  async function uploadPastedImage(file: File) {
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      console.warn('Bildformat nicht unterstützt:', file.type);
+      return;
+    }
+    
+    if (file.size > MAX_SIZE) {
+      console.warn('Bild zu groß:', file.size);
+      return;
+    }
+    
+    isPasting = true;
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Upload fehlgeschlagen');
+      }
+      
+      const data = await response.json();
+      const preview = URL.createObjectURL(file);
+      
+      uploadedImages = [...uploadedImages, { id: data.id, preview }];
+    } catch (err) {
+      console.error('Paste upload failed:', err);
+    } finally {
+      isPasting = false;
+    }
+  }
   
   function handleSubmit() {
     if (!message.trim() && uploadedImages.length === 0) return;
@@ -108,10 +166,11 @@
         bind:value={message}
         on:keydown={handleKeydown}
         on:input={handleInput}
-        placeholder="Nachricht schreiben..."
+        on:paste={handlePaste}
+        placeholder={isPasting ? "Bild wird hochgeladen..." : "Nachricht schreiben..."}
         rows="1"
         class="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2.5 sm:px-4 sm:py-3 resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent text-text-primary placeholder-text-secondary text-base"
-        disabled={disabled || isLoading}
+        disabled={disabled || isLoading || isPasting}
       ></textarea>
     </div>
     

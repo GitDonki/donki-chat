@@ -161,7 +161,8 @@
         id: m.id,
         role: m.role,
         content: m.content,
-        images: m.images,
+        images: m.images ? JSON.parse(m.images) : undefined,
+        reactions: m.reactions ? JSON.parse(m.reactions) : undefined,
         createdAt: new Date(m.created_at),
         isStreaming: false
       })));
@@ -298,6 +299,11 @@
       }
     }
   }
+  
+  function handleReaction(e: CustomEvent<{ messageId: string; emoji: string; reactions: string[] }>) {
+    const { messageId, reactions } = e.detail;
+    messages.updateMessage(messageId, { reactions });
+  }
 </script>
 
 <svelte:head>
@@ -388,7 +394,7 @@
         </div>
       {:else}
         {#each $messages as message (message.id)}
-          <ChatMessage {message} />
+          <ChatMessage {message} on:reaction={handleReaction} />
         {/each}
       {/if}
     </div>

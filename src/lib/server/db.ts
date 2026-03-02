@@ -27,6 +27,7 @@ export function initializeDatabase() {
       role TEXT NOT NULL,
       content TEXT NOT NULL,
       images TEXT,
+      reactions TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
@@ -52,6 +53,13 @@ export function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
   `);
+  
+  // Safe migration for existing databases - add reactions column if not exists
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN reactions TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
 }
 
 // Initialize on import
@@ -102,6 +110,37 @@ export function getMessages(conversationId: string) {
 export function deleteMessages(conversationId: string) {
   const stmt = db.prepare('DELETE FROM messages WHERE conversation_id = ?');
   return stmt.run(conversationId);
+}
+
+export function getMessage(id: string) {
+  const stmt = db.prepare('SELECT * FROM messages WHERE id = ?');
+  return stmt.get(id) as { id: string; reactions: string | null } | undefined;
+}
+
+export function toggleReaction(messageId: string, emoji: string): string[] {
+  const message = getMessage(messageId);
+  if (!message) return [];
+  
+  let reactions: string[] = [];
+  if (message.reactions) {
+    try {
+      reactions = JSON.parse(message.reactions);
+    } catch {
+      reactions = [];
+    }
+  }
+  
+  const idx = reactions.indexOf(emoji);
+  if (idx >= 0) {
+    reactions.splice(idx, 1);
+  } else {
+    reactions.push(emoji);
+  }
+  
+  const stmt = db.prepare('UPDATE messages SET reactions = ? WHERE id = ?');
+  stmt.run(reactions.length > 0 ? JSON.stringify(reactions) : null, messageId);
+  
+  return reactions;
 }
 
 export function createUpload(id: string, filename: string, mimeType: string, size: number, path: string) {
