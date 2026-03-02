@@ -1,4 +1,5 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
+import { selectedAgentId, type TeamMember } from './team';
 
 export interface ChatMessage {
   id: string;
@@ -13,6 +14,7 @@ export interface ChatMessage {
 export interface Conversation {
   id: string;
   title: string;
+  agentId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -80,6 +82,7 @@ function createConversationsListStore() {
           set(data.conversations.map((c: any) => ({
             id: c.id,
             title: c.title,
+            agentId: c.agent_id,
             createdAt: new Date(c.created_at),
             updatedAt: new Date(c.updated_at)
           })));
@@ -106,3 +109,166 @@ export const sidebarOpen = writable(false);
 
 // Derived store for checking if chat is empty
 export const isEmpty = derived(messages, $messages => $messages.length === 0);
+
+// ===============================
+// Agent-specific functions
+// ===============================
+
+// Load history for a specific agent
+export async function loadAgentHistory(agentId: string): Promise<void> {
+  try {
+    const response = await fetch(`/api/chat/history?agent=${agentId}`);
+    const data = await response.json();
+    
+    if (data.ok && data.messages) {
+      const loadedMessages: ChatMessage[] = data.messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : 
+          Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '',
+        images: m.images ? (typeof m.images === 'string' ? JSON.parse(m.images) : m.images) : undefined,
+        reactions: m.reactions ? (typeof m.reactions === 'string' ? JSON.parse(m.reactions) : m.reactions) : undefined,
+        createdAt: new Date(m.created_at || m.timestamp || Date.now()),
+        isStreaming: false
+      }));
+      
+      messages.set(loadedMessages);
+      
+      // Update current conversation
+      currentConversation.set({
+        id: data.conversationId,
+        title: `Chat mit ${agentId === 'main' ? 'Donki' : agentId}`,
+        agentId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
+      console.log('[Chat] Loaded', loadedMessages.length, 'messages for agent:', agentId);
+    }
+  } catch (e) {
+    console.error('[Chat] Failed to load agent history:', e);
+    messages.clear();
+  }
+}
+
+// Select an agent and load their history
+export async function selectAgent(agentId: string): Promise<void> {
+  // Update selected agent
+  selectedAgentId.set(agentId);
+  
+  // Clear current messages
+  messages.clear();
+  
+  // Load history for this agent
+  await loadAgentHistory(agentId);
+}
+
+// Send message to currently selected agent
+export async function sendMessageToAgent(
+  content: string, 
+  images?: string[],
+  onDelta?: (delta: string) => void,
+  onComplete?: () => void,
+  onError?: (error: string) => void
+): Promise<{ userMessageId: string; assistantMessageId: string; runId?: string }> {
+  const agentId = get(selectedAgentId);
+  const conversationId = `conv_${agentId}`;
+  
+  const userMessageId = crypto.randomUUID();
+  const assistantMessageId = crypto.randomUUID();
+  
+  // Add user message immediately
+  messages.addMessage({
+    id: userMessageId,
+    role: 'user',
+    content,
+    images: images?.length ? images : undefined,
+    createdAt: new Date()
+  });
+  
+  // Add placeholder for assistant
+  messages.addMessage({
+    id: assistantMessageId,
+    role: 'assistant',
+    content: '',
+    createdAt: new Date(),
+    isStreaming: true
+  });
+  
+  isLoading.start();
+  error.set(null);
+  
+  let runId: string | undefined;
+  
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: content,
+        images,
+        conversationId,
+        agentId,
+        userMessageId,
+        assistantMessageId
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Chat request failed');
+    }
+    
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+    
+    const decoder = new TextDecoder();
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+          
+          try {
+            const event = JSON.parse(data);
+            
+            if (event.type === 'runId') {
+              runId = event.runId;
+            } else if (event.type === 'delta' && event.content) {
+              messages.appendToMessage(assistantMessageId, event.content);
+              onDelta?.(event.content);
+            } else if (event.type === 'no-reply') {
+              messages.removeMessage(assistantMessageId);
+            } else if (event.type === 'error') {
+              error.set(event.error);
+              onError?.(event.error);
+            }
+          } catch {
+            // Skip non-JSON lines
+          }
+        }
+      }
+    }
+    
+    messages.updateMessage(assistantMessageId, { isStreaming: false });
+    onComplete?.();
+    
+  } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : 'Ein Fehler ist aufgetreten';
+    error.set(errorMsg);
+    messages.removeMessage(assistantMessageId);
+    onError?.(errorMsg);
+  } finally {
+    isLoading.stop();
+  }
+  
+  return { userMessageId, assistantMessageId, runId };
+}
