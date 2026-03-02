@@ -6,6 +6,9 @@
   import type { ChatMessage } from '$lib/stores/chat';
   
   export let message: ChatMessage;
+  export let agentName: string = 'Donki';
+  export let agentEmoji: string = '🐧';
+  export let agentAvatar: string | null = null;
   
   const dispatch = createEventDispatcher<{
     reaction: { messageId: string; emoji: string; reactions: string[] };
@@ -14,8 +17,9 @@
   // Show typing indicator when streaming and content is empty
   $: showTyping = message.isStreaming && !message.content;
   
-  // Donki avatar URL
-  const donkiAvatar = 'https://files.catbox.moe/3vz1n6.jpg';
+  // Default Donki avatar
+  const defaultAvatar = 'https://files.catbox.moe/3vz1n6.jpg';
+  $: avatarUrl = agentAvatar || (agentName === 'Donki' ? defaultAvatar : null);
   
   $: isUser = message.role === 'user';
   $: formattedTime = new Date(message.createdAt).toLocaleTimeString('de-DE', {
@@ -86,14 +90,20 @@
   on:mouseleave={() => { isHovering = false; showReactionPicker = false; }}
   role="article"
 >
-  <!-- Avatar (left for Donki) -->
+  <!-- Avatar (left for assistant) -->
   {#if !isUser}
     <div class="avatar flex-shrink-0">
-      <img 
-        src={donkiAvatar} 
-        alt="Donki" 
-        class="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-accent"
-      />
+      {#if avatarUrl}
+        <img 
+          src={avatarUrl} 
+          alt={agentName} 
+          class="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-accent"
+        />
+      {:else}
+        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-bg-tertiary border-2 border-accent text-xl">
+          {agentEmoji}
+        </div>
+      {/if}
     </div>
   {/if}
   
@@ -133,7 +143,7 @@
       <!-- Header with name and time -->
       <div class="header flex items-center gap-2 mb-1 text-xs {isUser ? 'text-white/70 justify-end' : 'text-text-secondary'}">
         <span class="font-medium {isUser ? 'text-white/90' : 'text-text-primary'}">
-          {isUser ? 'Du' : 'Donki'}
+          {isUser ? 'Du' : agentName}
         </span>
         <span>{formattedTime}</span>
         {#if message.isStreaming}

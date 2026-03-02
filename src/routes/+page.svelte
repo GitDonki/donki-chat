@@ -103,13 +103,13 @@
   }
   
   // Get avatar URL for current agent
-  function getAgentAvatar(agentId: string): string {
+  function getAgentAvatar(agentId: string): string | null {
     // Default Donki avatar
     if (agentId === 'main') {
       return 'https://files.catbox.moe/3vz1n6.jpg';
     }
-    // For other agents, return empty (we'll use emoji)
-    return '';
+    // For other agents, return null (we'll use emoji)
+    return null;
   }
 </script>
 
@@ -216,7 +216,13 @@
         </div>
       {:else}
         {#each $messages as message (message.id)}
-          <ChatMessage {message} on:reaction={handleReaction} />
+          <ChatMessage 
+            {message} 
+            agentName={$selectedAgent?.name || 'Donki'}
+            agentEmoji={$selectedAgent?.emoji || '🐧'}
+            agentAvatar={getAgentAvatar($selectedAgent?.id || 'main')}
+            on:reaction={handleReaction} 
+          />
         {/each}
       {/if}
     </div>
