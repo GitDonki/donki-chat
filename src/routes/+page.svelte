@@ -311,7 +311,9 @@
         body: JSON.stringify({
           message,
           images,
-          conversationId
+          conversationId,
+          userMessageId,
+          assistantMessageId
         })
       });
       

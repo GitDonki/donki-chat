@@ -12,7 +12,7 @@ import { getUploadAsBase64 } from '$lib/server/upload';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const { message, images, conversationId } = await request.json();
+    const { message, images, conversationId, userMessageId: clientUserMsgId, assistantMessageId: clientAssistantMsgId } = await request.json();
     
     if (!message && (!images || images.length === 0)) {
       return new Response(JSON.stringify({ error: 'Message or images required' }), {
@@ -27,8 +27,8 @@ export const POST: RequestHandler = async ({ request }) => {
       createConversation(conversationId, 'Neuer Chat');
     }
     
-    // Save user message
-    const userMessageId = uuid();
+    // Use client-provided IDs if available (for reaction support), otherwise generate
+    const userMessageId = clientUserMsgId || uuid();
     addMessage(userMessageId, conversationId, 'user', message, images);
     
     // Get conversation history for title update check
@@ -131,8 +131,9 @@ export const POST: RequestHandler = async ({ request }) => {
                                      fullResponse.trim().startsWith('NO_REPLY');
               
               // Save assistant message (skip meta responses)
+              // Use client-provided ID so frontend reactions work correctly
               if (!isMetaResponse && fullResponse.trim()) {
-                const assistantMessageId = uuid();
+                const assistantMessageId = clientAssistantMsgId || uuid();
                 addMessage(assistantMessageId, conversationId, 'assistant', fullResponse);
               }
               
@@ -214,8 +215,8 @@ export const POST: RequestHandler = async ({ request }) => {
               gateway.removeListener('chat', chatHandler);
               
               if (fullResponse) {
-                // Save partial response
-                const assistantMessageId = uuid();
+                // Save partial response - use client-provided ID for reaction support
+                const assistantMessageId = clientAssistantMsgId || uuid();
                 addMessage(assistantMessageId, conversationId, 'assistant', fullResponse);
               }
               
