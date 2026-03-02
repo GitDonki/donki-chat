@@ -88,8 +88,16 @@ export function connectSSE(agentId: string): void {
 
 // Handle incoming chat events
 function handleChatEvent(payload: any, agentId: string): void {
-  // Skip events from our own sends
+  // Skip events from our own sends (tracked by runId)
   if (payload.runId && localRunIds.has(payload.runId)) {
+    console.log('[SSE] Skipping own message by runId:', payload.runId);
+    return;
+  }
+  
+  // Skip events from the WebChat channel (that's us!)
+  // SSE should only show messages from OTHER channels (Telegram, Signal, etc.)
+  if (payload.channel === 'webchat' || payload.sessionKey?.includes('webchat')) {
+    console.log('[SSE] Skipping webchat message');
     return;
   }
   
