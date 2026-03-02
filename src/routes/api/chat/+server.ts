@@ -90,16 +90,25 @@ export const POST: RequestHandler = async ({ request }) => {
               return;
             }
             
+            // Skip tool-related states - only process actual assistant text streaming
+            // States: streaming, tool_use, tool_result, final
+            const state = payload.state || '';
+            if (state === 'tool_use' || state === 'tool_result') {
+              console.log('[ChatHandler] Skipping tool state:', state);
+              return;
+            }
+            
             // Handle different event types
             // Gateway sends cumulative text in message.content, not incremental deltas
             // We need to compute the delta ourselves
             let delta = '';
             
             if (payload.message?.content) {
-              // Extract text from content array
+              // Extract text from content array, ONLY type='text' entries
               const content = payload.message.content;
               let currentText = '';
               if (Array.isArray(content)) {
+                // Filter strictly for text blocks, ignore tool_use/tool_result blocks
                 currentText = content
                   .filter((c: any) => c.type === 'text')
                   .map((c: any) => c.text || '')
@@ -108,16 +117,23 @@ export const POST: RequestHandler = async ({ request }) => {
                 currentText = content;
               }
               
+              // Skip if no actual text content
+              if (!currentText.trim()) {
+                return;
+              }
+              
               // Compute delta: what's new since last known text
               if (currentText.startsWith(lastKnownText)) {
                 // Normal case: text was appended
                 delta = currentText.slice(lastKnownText.length);
               } else if (currentText.length > 0) {
                 // Text was replaced/reset (happens after tool calls)
-                // Append the new text with a separator
-                if (lastKnownText.length > 0) {
-                  console.log('[ChatHandler] Text reset detected, appending new segment');
-                  delta = '\n\n' + currentText;
+                // Only use the new text, don't keep accumulating tool output fragments
+                if (lastKnownText.length > 0 && currentText !== lastKnownText) {
+                  console.log('[ChatHandler] Text reset detected, using new segment');
+                  // Reset - this is a fresh text block after tools
+                  delta = currentText;
+                  lastKnownText = ''; // Reset tracking
                 } else {
                   delta = currentText;
                 }
