@@ -30,6 +30,21 @@
   async function toggleReaction(emoji: string) {
     showReactionPicker = false;
     
+    // Optimistic update: immediately update UI before API call
+    const currentReactions = message.reactions || [];
+    const idx = currentReactions.indexOf(emoji);
+    const optimisticReactions = idx >= 0 
+      ? currentReactions.filter(r => r !== emoji)
+      : [...currentReactions, emoji];
+    
+    // Dispatch optimistic update immediately for snappy UI
+    dispatch('reaction', { 
+      messageId: message.id, 
+      emoji, 
+      reactions: optimisticReactions 
+    });
+    
+    // Then persist to backend (fire and forget - UI already updated)
     try {
       const response = await fetch('/api/reactions', {
         method: 'POST',
@@ -39,14 +54,19 @@
       
       if (response.ok) {
         const data = await response.json();
-        dispatch('reaction', { 
-          messageId: message.id, 
-          emoji, 
-          reactions: data.reactions 
-        });
+        // Only sync if backend has different state (e.g. message was found)
+        // Don't revert to empty array if backend couldn't find message
+        if (data.reactions && data.reactions.length > 0) {
+          dispatch('reaction', { 
+            messageId: message.id, 
+            emoji, 
+            reactions: data.reactions 
+          });
+        }
       }
     } catch (err) {
-      console.error('Reaction failed:', err);
+      console.error('Reaction sync failed:', err);
+      // Keep optimistic state - don't revert on error
     }
   }
   

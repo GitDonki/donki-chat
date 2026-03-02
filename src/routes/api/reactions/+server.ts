@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { toggleReaction } from '$lib/server/db';
+import { toggleReaction, getMessage } from '$lib/server/db';
 import { gateway } from '$lib/server/gateway-ws';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -9,6 +9,21 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!messageId || !emoji) {
       return new Response(JSON.stringify({ error: 'messageId and emoji required' }), {
         status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Check if message exists first
+    const message = getMessage(messageId);
+    if (!message) {
+      console.warn('[Reactions] Message not found in DB:', messageId);
+      // Return 404 so frontend knows to keep optimistic state
+      return new Response(JSON.stringify({ 
+        error: 'Message not found', 
+        messageId,
+        reactions: null  // null = not found, [] = found but empty
+      }), {
+        status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
     }
