@@ -137,10 +137,15 @@ export async function loadAgentHistory(agentId: string): Promise<void> {
         const content = typeof m.content === 'string' ? m.content : 
           Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '';
         
-        // Skip system notifications (exec completions etc.)
-        if (content.trim().startsWith('System: [')) {
-          continue;
-        }
+        // Skip system notifications and raw exec output
+        const trimmed = content.trim();
+        if (trimmed.startsWith('System: [')) continue;
+        if (trimmed.startsWith('sent ') && trimmed.includes('bytes')) continue; // rsync
+        if (trimmed.startsWith('[main ') && trimmed.includes('fix:')) continue; // git commits
+        if (trimmed.startsWith('[main ') && trimmed.includes('feat:')) continue;
+        if (trimmed.startsWith('sha256:')) continue; // docker hashes
+        if (trimmed.startsWith('DEPRECATED:')) continue;
+        if (trimmed.match(/^[a-f0-9]{64}$/)) continue; // container IDs
         
         seenIds.add(id);
         
