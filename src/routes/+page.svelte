@@ -1,18 +1,24 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
-  import { Sun, Moon, Menu, Trash2 } from 'lucide-svelte';
+  import { Sun, Moon, Menu, Trash2, EyeOff } from 'lucide-svelte';
   import { theme } from '$lib/stores/theme';
   import ChatMessage from '$lib/components/ChatMessage.svelte';
   import ChatInput from '$lib/components/ChatInput.svelte';
   import TeamSidebar from '$lib/components/TeamSidebar.svelte';
+  import DateDivider from '$lib/components/DateDivider.svelte';
+  import LoadMoreButton from '$lib/components/LoadMoreButton.svelte';
   import { 
     messages, 
     currentConversation, 
     isLoading, 
     error, 
     sidebarOpen,
+    pagination,
+    viewCleared,
     selectAgent,
     sendMessageToAgent,
+    clearView,
+    showAllMessages,
     type ChatMessage as ChatMessageType 
   } from '$lib/stores/chat';
   import { 
@@ -22,6 +28,20 @@
     loadTeam 
   } from '$lib/stores/team';
   import { connectSSE, disconnectSSE, trackRunId } from '$lib/stores/sse';
+  import { stopPolling } from '$lib/stores/agent-sync';
+  
+  // Group messages by date for dividers
+  function getDateKey(date: Date): string {
+    return date.toISOString().split('T')[0];
+  }
+  
+  // Check if we need a date divider before this message
+  function needsDateDivider(messages: ChatMessageType[], index: number): boolean {
+    if (index === 0) return true;
+    const current = getDateKey(messages[index].createdAt);
+    const previous = getDateKey(messages[index - 1].createdAt);
+    return current !== previous;
+  }
   
   let messagesContainer: HTMLDivElement;
   
@@ -34,12 +54,30 @@
   
   onDestroy(() => {
     disconnectSSE();
+    stopPolling();
   });
   
   async function handleAgentSelect(e: CustomEvent<{ agentId: string }>) {
     const { agentId } = e.detail;
     await selectAgent(agentId);
     await scrollToBottom();
+  }
+  
+  function handleJumpToDate(e: CustomEvent<{ date: string }>) {
+    const { date } = e.detail;
+    // Find the first message with this date
+    const targetMessage = $messages.find(m => {
+      const msgDate = m.createdAt.toISOString().split('T')[0];
+      return msgDate === date;
+    });
+    
+    if (targetMessage) {
+      // Find the message element and scroll to it
+      const element = document.getElementById(`msg-${targetMessage.id}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
   }
   
   async function scrollToBottom() {
@@ -119,7 +157,7 @@
 
 <div class="flex h-screen">
   <!-- Team Sidebar -->
-  <TeamSidebar on:select={handleAgentSelect} />
+  <TeamSidebar on:select={handleAgentSelect} on:jumpToDate={handleJumpToDate} />
   
   <!-- Main Chat Area -->
   <div class="flex-1 flex flex-col min-w-0">
@@ -166,11 +204,19 @@
       
       <div class="flex items-center gap-1 sm:gap-2">
         <button
-          on:click={() => theme.toggle()}
+          on:click={() => {
+            // Cycle through: auto → dark → light → auto
+            const modes = ['auto', 'dark', 'light'];
+            const currentIndex = modes.indexOf($theme);
+            const nextMode = modes[(currentIndex + 1) % modes.length];
+            theme.set(nextMode);
+          }}
           class="p-2 sm:p-2 rounded-lg hover:bg-bg-tertiary active:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
-          title="Theme wechseln"
+          title={$theme === 'auto' ? 'Auto (20:00-06:00)' : $theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
         >
-          {#if $theme === 'light'}
+          {#if $theme === 'auto'}
+            <span class="text-sm">🌓</span>
+          {:else if $theme === 'light'}
             <Moon class="w-5 h-5" />
           {:else}
             <Sun class="w-5 h-5" />
@@ -214,8 +260,31 @@
             {/if}
           </div>
         </div>
+      {:else if $viewCleared}
+        <!-- View cleared state -->
+        <div class="flex items-center justify-center h-full px-4">
+          <div class="text-center text-text-secondary">
+            <EyeOff class="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p class="text-base">Ansicht geleert</p>
+            <p class="text-sm mt-1 opacity-75">{$messages.length} Nachrichten ausgeblendet</p>
+            <button
+              on:click={showAllMessages}
+              class="mt-4 px-4 py-2 text-sm bg-bg-tertiary hover:bg-accent/20 rounded-lg transition-colors"
+            >
+              Alle anzeigen
+            </button>
+          </div>
+        </div>
       {:else}
-        {#each $messages as message (message.id)}
+        <!-- Load more button at top -->
+        <LoadMoreButton />
+        
+        {#each $messages as message, index (message.id)}
+          <!-- Date divider -->
+          {#if needsDateDivider($messages, index)}
+            <DateDivider date={message.createdAt} />
+          {/if}
+          
           <ChatMessage 
             {message} 
             agentName={$selectedAgent?.name || 'Donki'}

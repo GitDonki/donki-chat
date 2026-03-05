@@ -2,6 +2,8 @@
   import { RefreshCw, Activity, Clock, Zap } from 'lucide-svelte';
   import { selectedAgentId } from '$lib/stores/team';
   
+  export let compact = false;
+  
   interface SessionStatus {
     model?: string;
     lastActive?: string;
@@ -70,67 +72,94 @@
   }
 </script>
 
-<div class="flex flex-col h-full">
-  <div class="flex items-center justify-between px-3 py-2 border-b border-border">
-    <div class="flex items-center gap-2">
-      <Activity class="w-4 h-4 text-accent" />
-      <span class="text-sm font-medium text-text-primary">Status</span>
+{#if compact}
+  <!-- Compact mode: single line -->
+  <div class="flex items-center justify-between px-3 py-2 border-t border-border">
+    <div class="flex items-center gap-3 text-xs">
+      <span class="text-text-secondary">
+        <Activity class="w-3 h-3 inline mr-1" />
+        {status ? getModelShort(status.model) : '-'}
+      </span>
+      {#if status?.totalTokens}
+        <span class="text-text-secondary">
+          <Zap class="w-3 h-3 inline mr-0.5" />
+          {formatTokens(status.totalTokens)}
+        </span>
+      {/if}
     </div>
     <button
       on:click={refreshStatus}
       disabled={loading}
-      class="p-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
+      class="p-1 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
       title="Aktualisieren"
     >
-      <RefreshCw class="w-4 h-4 {loading ? 'animate-spin' : ''}" />
+      <RefreshCw class="w-3.5 h-3.5 {loading ? 'animate-spin' : ''}" />
     </button>
   </div>
-  
-  <div class="flex-1 overflow-y-auto p-3">
-    {#if loading && !status}
-      <div class="flex items-center justify-center py-4">
-        <div class="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+{:else}
+  <!-- Full mode -->
+  <div class="flex flex-col h-full">
+    <div class="flex items-center justify-between px-3 py-2 border-b border-border">
+      <div class="flex items-center gap-2">
+        <Activity class="w-4 h-4 text-accent" />
+        <span class="text-sm font-medium text-text-primary">Status</span>
       </div>
-    {:else if error}
-      <p class="text-xs text-red-400 text-center py-2">{error}</p>
-    {:else if status?.error}
-      <p class="text-xs text-red-400 text-center py-2">{status.error}</p>
-    {:else if status}
-      <div class="space-y-3">
-        <!-- Model -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-text-secondary">Model</span>
-          <span class="text-xs font-medium text-text-primary">{getModelShort(status.model)}</span>
+      <button
+        on:click={refreshStatus}
+        disabled={loading}
+        class="p-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
+        title="Aktualisieren"
+      >
+        <RefreshCw class="w-4 h-4 {loading ? 'animate-spin' : ''}" />
+      </button>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto p-3">
+      {#if loading && !status}
+        <div class="flex items-center justify-center py-4">
+          <div class="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
         </div>
-        
-        <!-- Last Active -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-text-secondary flex items-center gap-1">
-            <Clock class="w-3 h-3" /> Aktiv
-          </span>
-          <span class="text-xs font-medium text-text-primary">{formatLastActive(status.lastActive)}</span>
+      {:else if error}
+        <p class="text-xs text-red-400 text-center py-2">{error}</p>
+      {:else if status?.error}
+        <p class="text-xs text-red-400 text-center py-2">{status.error}</p>
+      {:else if status}
+        <div class="space-y-3">
+          <!-- Model -->
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-text-secondary">Model</span>
+            <span class="text-xs font-medium text-text-primary">{getModelShort(status.model)}</span>
+          </div>
+          
+          <!-- Last Active -->
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-text-secondary flex items-center gap-1">
+              <Clock class="w-3 h-3" /> Aktiv
+            </span>
+            <span class="text-xs font-medium text-text-primary">{formatLastActive(status.lastActive)}</span>
+          </div>
+          
+          <!-- Total Tokens -->
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-text-secondary flex items-center gap-1">
+              <Zap class="w-3 h-3" /> Tokens
+            </span>
+            <span class="text-xs font-medium text-text-primary">
+              {formatTokens(status.totalTokens)}
+            </span>
+          </div>
+          
+          <!-- Context -->
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-text-secondary">Context</span>
+            <span class="text-xs font-medium text-text-primary">
+              {formatTokens(status.contextTokens)}
+            </span>
+          </div>
         </div>
-        
-        <!-- Total Tokens -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-text-secondary flex items-center gap-1">
-            <Zap class="w-3 h-3" /> Tokens
-          </span>
-          <span class="text-xs font-medium text-text-primary">
-            {formatTokens(status.totalTokens)}
-          </span>
-        </div>
-        
-        <!-- Context -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-text-secondary">Context</span>
-          <span class="text-xs font-medium text-text-primary">
-            {formatTokens(status.contextTokens)}
-          </span>
-        </div>
-      </div>
-    {:else}
-      <p class="text-xs text-text-secondary text-center py-2">Keine Daten</p>
-    {/if}
+      {:else}
+        <p class="text-xs text-text-secondary text-center py-2">Keine Daten</p>
+      {/if}
+    </div>
   </div>
-</div>
+{/if}

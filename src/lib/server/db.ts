@@ -203,6 +203,50 @@ export function getMessages(conversationId: string): MessageRow[] {
   return stmt.all(conversationId) as MessageRow[];
 }
 
+// Paginated messages - returns newest first, use for "load more"
+export function getMessagesPaginated(conversationId: string, limit: number = 50, offset: number = 0): { messages: MessageRow[]; total: number; hasMore: boolean } {
+  // Get total count
+  const countStmt = db.prepare('SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?');
+  const { count: total } = countStmt.get(conversationId) as { count: number };
+  
+  // Get messages in reverse order (newest first for pagination), then reverse for display
+  const stmt = db.prepare(`
+    SELECT * FROM messages 
+    WHERE conversation_id = ? 
+    ORDER BY created_at DESC 
+    LIMIT ? OFFSET ?
+  `);
+  const messages = (stmt.all(conversationId, limit, offset) as MessageRow[]).reverse();
+  
+  return {
+    messages,
+    total,
+    hasMore: offset + messages.length < total
+  };
+}
+
+// Get dates with message counts for history navigation
+export function getMessageDates(conversationId: string): { date: string; count: number }[] {
+  const stmt = db.prepare(`
+    SELECT DATE(created_at) as date, COUNT(*) as count 
+    FROM messages 
+    WHERE conversation_id = ? 
+    GROUP BY DATE(created_at) 
+    ORDER BY date DESC
+  `);
+  return stmt.all(conversationId) as { date: string; count: number }[];
+}
+
+// Get messages for a specific date
+export function getMessagesByDate(conversationId: string, date: string): MessageRow[] {
+  const stmt = db.prepare(`
+    SELECT * FROM messages 
+    WHERE conversation_id = ? AND DATE(created_at) = ?
+    ORDER BY created_at ASC
+  `);
+  return stmt.all(conversationId, date) as MessageRow[];
+}
+
 export function deleteMessages(conversationId: string) {
   const stmt = db.prepare('DELETE FROM messages WHERE conversation_id = ?');
   return stmt.run(conversationId);

@@ -12,6 +12,18 @@ export interface ChatMessage {
   isStreaming?: boolean;
 }
 
+export interface HistoryDate {
+  date: string;
+  count: number;
+}
+
+export interface PaginationState {
+  total: number;
+  loaded: number;
+  hasMore: boolean;
+  isLoading: boolean;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -108,6 +120,20 @@ export const isLoading = createLoadingStore();
 export const error = writable<string | null>(null);
 export const sidebarOpen = writable(false);
 
+// Pagination state
+export const pagination = writable<PaginationState>({
+  total: 0,
+  loaded: 0,
+  hasMore: false,
+  isLoading: false
+});
+
+// History dates for sidebar navigation
+export const historyDates = writable<HistoryDate[]>([]);
+
+// View cleared state (visual only, not persistent)
+export const viewCleared = writable(false);
+
 // Derived store for checking if chat is empty
 export const isEmpty = derived(messages, $messages => $messages.length === 0);
 
@@ -115,10 +141,42 @@ export const isEmpty = derived(messages, $messages => $messages.length === 0);
 // Agent-specific functions
 // ===============================
 
-// Load history for a specific agent
+// Parse message from API response
+function parseMessage(m: any): ChatMessage | null {
+  const id = m.id || crypto.randomUUID();
+  
+  // Extract content
+  const content = typeof m.content === 'string' ? m.content : 
+    Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '';
+  
+  // Skip system notifications and raw exec output
+  const trimmed = content.trim();
+  if (trimmed.startsWith('System: [')) return null;
+  if (trimmed.startsWith('sent ') && trimmed.includes('bytes')) return null; // rsync
+  if (trimmed.startsWith('[main ') && trimmed.includes('fix:')) return null; // git commits
+  if (trimmed.startsWith('[main ') && trimmed.includes('feat:')) return null;
+  if (trimmed.startsWith('sha256:')) return null; // docker hashes
+  if (trimmed.startsWith('DEPRECATED:')) return null;
+  if (trimmed.match(/^[a-f0-9]{64}$/)) return null; // container IDs
+  
+  return {
+    id,
+    role: m.role,
+    content,
+    images: m.images ? (typeof m.images === 'string' ? JSON.parse(m.images) : m.images) : undefined,
+    reactions: m.reactions ? (typeof m.reactions === 'string' ? JSON.parse(m.reactions) : m.reactions) : undefined,
+    createdAt: new Date(m.created_at || m.timestamp || Date.now()),
+    isStreaming: false
+  };
+}
+
+// Load history for a specific agent (paginated, last 50)
 export async function loadAgentHistory(agentId: string): Promise<void> {
   try {
-    const response = await fetch(`/api/chat/history?agent=${agentId}`);
+    // Reset view cleared state on new load
+    viewCleared.set(false);
+    
+    const response = await fetch(`/api/chat/history?agent=${agentId}&paginated=true&limit=50&offset=0`);
     const data = await response.json();
     
     if (data.ok && data.messages) {
@@ -127,40 +185,21 @@ export async function loadAgentHistory(agentId: string): Promise<void> {
       const loadedMessages: ChatMessage[] = [];
       
       for (const m of data.messages) {
-        const id = m.id || crypto.randomUUID();
-        if (seenIds.has(id)) {
-          console.warn('[Chat] Skipping duplicate message ID:', id);
-          continue;
-        }
-        
-        // Extract content
-        const content = typeof m.content === 'string' ? m.content : 
-          Array.isArray(m.content) ? m.content.map((c: any) => c.text || '').join('') : '';
-        
-        // Skip system notifications and raw exec output
-        const trimmed = content.trim();
-        if (trimmed.startsWith('System: [')) continue;
-        if (trimmed.startsWith('sent ') && trimmed.includes('bytes')) continue; // rsync
-        if (trimmed.startsWith('[main ') && trimmed.includes('fix:')) continue; // git commits
-        if (trimmed.startsWith('[main ') && trimmed.includes('feat:')) continue;
-        if (trimmed.startsWith('sha256:')) continue; // docker hashes
-        if (trimmed.startsWith('DEPRECATED:')) continue;
-        if (trimmed.match(/^[a-f0-9]{64}$/)) continue; // container IDs
-        
-        seenIds.add(id);
-        
-        loadedMessages.push({
-          id,
-          role: m.role,
-          content,
-          images: m.images ? (typeof m.images === 'string' ? JSON.parse(m.images) : m.images) : undefined,
-          reactions: m.reactions ? (typeof m.reactions === 'string' ? JSON.parse(m.reactions) : m.reactions) : undefined,
-          createdAt: new Date(m.created_at || m.timestamp || Date.now()),
-          isStreaming: false
-        });
+        const parsed = parseMessage(m);
+        if (!parsed || seenIds.has(parsed.id)) continue;
+        seenIds.add(parsed.id);
+        loadedMessages.push(parsed);
       }
       
       messages.set(loadedMessages);
+      
+      // Update pagination state
+      pagination.set({
+        total: data.total || loadedMessages.length,
+        loaded: loadedMessages.length,
+        hasMore: data.hasMore || false,
+        isLoading: false
+      });
       
       // Update current conversation
       currentConversation.set({
@@ -171,12 +210,83 @@ export async function loadAgentHistory(agentId: string): Promise<void> {
         updatedAt: new Date()
       });
       
-      console.log('[Chat] Loaded', loadedMessages.length, 'messages for agent:', agentId);
+      console.log('[Chat] Loaded', loadedMessages.length, 'of', data.total, 'messages for agent:', agentId);
+      
+      // Load history dates for sidebar
+      loadHistoryDates(agentId);
     }
   } catch (e) {
     console.error('[Chat] Failed to load agent history:', e);
     messages.clear();
+    pagination.set({ total: 0, loaded: 0, hasMore: false, isLoading: false });
   }
+}
+
+// Load more (older) messages
+export async function loadMoreMessages(): Promise<void> {
+  const pag = get(pagination);
+  const agentId = get(selectedAgentId);
+  
+  if (pag.isLoading || !pag.hasMore) return;
+  
+  pagination.update(p => ({ ...p, isLoading: true }));
+  
+  try {
+    const response = await fetch(`/api/chat/history?agent=${agentId}&paginated=true&limit=50&offset=${pag.loaded}`);
+    const data = await response.json();
+    
+    if (data.ok && data.messages) {
+      const currentMessages = get(messages);
+      const seenIds = new Set(currentMessages.map(m => m.id));
+      const newMessages: ChatMessage[] = [];
+      
+      for (const m of data.messages) {
+        const parsed = parseMessage(m);
+        if (!parsed || seenIds.has(parsed.id)) continue;
+        newMessages.push(parsed);
+      }
+      
+      // Prepend older messages (they come in chronological order)
+      messages.set([...newMessages, ...currentMessages]);
+      
+      pagination.update(p => ({
+        ...p,
+        loaded: p.loaded + newMessages.length,
+        hasMore: data.hasMore || false,
+        isLoading: false
+      }));
+      
+      console.log('[Chat] Loaded', newMessages.length, 'more messages');
+    }
+  } catch (e) {
+    console.error('[Chat] Failed to load more messages:', e);
+    pagination.update(p => ({ ...p, isLoading: false }));
+  }
+}
+
+// Load history dates for sidebar
+export async function loadHistoryDates(agentId: string): Promise<void> {
+  try {
+    const response = await fetch(`/api/chat/history/dates?agent=${agentId}`);
+    const data = await response.json();
+    
+    if (data.ok && data.dates) {
+      historyDates.set(data.dates);
+    }
+  } catch (e) {
+    console.error('[Chat] Failed to load history dates:', e);
+    historyDates.set([]);
+  }
+}
+
+// Clear view (visual only)
+export function clearView(): void {
+  viewCleared.set(true);
+}
+
+// Show all messages again
+export function showAllMessages(): void {
+  viewCleared.set(false);
 }
 
 // Select an agent and load their history

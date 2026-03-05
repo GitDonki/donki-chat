@@ -85,6 +85,7 @@
 <svelte:window on:click={handleClickOutside} />
 
 <div 
+  id="msg-{message.id}"
   class="message-row flex {isUser ? 'justify-end' : 'justify-start'} p-2 sm:p-3 gap-2 sm:gap-3"
   on:mouseenter={() => isHovering = true}
   on:mouseleave={() => { isHovering = false; showReactionPicker = false; }}

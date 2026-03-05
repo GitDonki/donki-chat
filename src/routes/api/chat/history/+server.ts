@@ -9,14 +9,17 @@ import {
   createConversation,
   getAgentConversation,
   getMessages,
+  getMessagesPaginated,
   deleteMessages,
   TEAM_AGENTS
 } from '$lib/server/db';
 
 export const GET: RequestHandler = async ({ url }) => {
   const agentId = url.searchParams.get('agent') || 'main';
-  const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+  const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+  const offset = parseInt(url.searchParams.get('offset') || '0', 10);
   const source = url.searchParams.get('source'); // 'gateway' | 'db' | undefined
+  const paginated = url.searchParams.get('paginated') === 'true';
   
   // Validate agent
   const agent = TEAM_AGENTS.find(a => a.id === agentId);
@@ -29,6 +32,23 @@ export const GET: RequestHandler = async ({ url }) => {
     if (source !== 'gateway') {
       const conversation = getAgentConversation(agentId);
       if (conversation) {
+        // Use paginated query if requested
+        if (paginated) {
+          const result = getMessagesPaginated(conversation.id, limit, offset);
+          return json({
+            ok: true,
+            conversationId: conversation.id,
+            agentId,
+            messages: result.messages,
+            total: result.total,
+            hasMore: result.hasMore,
+            offset,
+            limit,
+            source: 'db'
+          });
+        }
+        
+        // Legacy: return all messages
         const dbMessages = getMessages(conversation.id);
         if (dbMessages && dbMessages.length > 0) {
           return json({

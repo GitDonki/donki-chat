@@ -210,6 +210,40 @@ function handleChatEvent(payload: any, agentId: string): void {
     
     if (!content.trim()) return;
     
+    // ===== SYSTEM MESSAGE FILTERS (same as in loadAgentHistory) =====
+    const trimmed = content.trim();
+    
+    // Skip system notifications and raw exec output
+    if (trimmed.startsWith('System: [')) {
+      console.log('[SSE] Filtered: System notification');
+      return;
+    }
+    if (trimmed.startsWith('sent ') && trimmed.includes('bytes')) {
+      console.log('[SSE] Filtered: rsync output');
+      return;
+    }
+    if (trimmed.startsWith('[main ') && (trimmed.includes('fix:') || trimmed.includes('feat:'))) {
+      console.log('[SSE] Filtered: git commit');
+      return;
+    }
+    if (trimmed.startsWith('sha256:')) {
+      console.log('[SSE] Filtered: docker hash');
+      return;
+    }
+    if (trimmed.startsWith('DEPRECATED:')) {
+      console.log('[SSE] Filtered: deprecation warning');
+      return;
+    }
+    if (trimmed.match(/^[a-f0-9]{64}$/)) {
+      console.log('[SSE] Filtered: container ID');
+      return;
+    }
+    if (trimmed === 'NO_REPLY' || trimmed === 'HEARTBEAT_OK') {
+      console.log('[SSE] Filtered: meta response');
+      return;
+    }
+    // ===== END FILTERS =====
+    
     // Check for duplicates by content hash
     const currentMessages = get(messages);
     const contentPrefix = `assistant:${content.slice(0, 100)}`;
@@ -269,8 +303,15 @@ export function disconnectSSE(): void {
 }
 
 // Subscribe to agent changes and reconnect SSE
+// NOTE: Only use SSE for 'main' agent. Other agents use polling (agent-sync.ts)
 selectedAgentId.subscribe(agentId => {
   if (agentId && typeof window !== 'undefined') {
-    connectSSE(agentId);
+    // Only connect SSE for main agent
+    if (agentId === 'main') {
+      connectSSE(agentId);
+    } else {
+      // Disconnect SSE for non-main agents (they use polling)
+      disconnectSSE();
+    }
   }
 });
