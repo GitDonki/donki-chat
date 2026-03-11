@@ -39,6 +39,7 @@ export interface ConversationRow {
   id: string;
   title: string;
   agent_id: string;
+  archived: number;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +115,14 @@ export function initializeDatabase() {
     // Column already exists, ignore
   }
   
+  // Migration: Add archived column if not exists
+  try {
+    db.exec(`ALTER TABLE conversations ADD COLUMN archived INTEGER DEFAULT 0`);
+    console.log('[DB] Added archived column to conversations');
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  
   // Create agent index AFTER migration ensures column exists
   try {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations(agent_id)`);
@@ -177,9 +186,18 @@ export function updateConversationTitle(id: string, title: string) {
   return stmt.run(title, id);
 }
 
-export function getAllConversations() {
-  const stmt = db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC');
+export function getAllConversations(includeArchived = false) {
+  if (includeArchived) {
+    const stmt = db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC');
+    return stmt.all();
+  }
+  const stmt = db.prepare('SELECT * FROM conversations WHERE archived = 0 OR archived IS NULL ORDER BY updated_at DESC');
   return stmt.all();
+}
+
+export function archiveConversation(id: string, archived = true) {
+  const stmt = db.prepare('UPDATE conversations SET archived = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  return stmt.run(archived ? 1 : 0, id);
 }
 
 export function deleteConversation(id: string) {

@@ -109,6 +109,22 @@ function createConversationsListStore() {
     },
     add: (conv: Conversation) => {
       update(convs => [conv, ...convs]);
+    },
+    archive: async (id: string) => {
+      try {
+        const response = await fetch(`/api/conversations/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ archived: true })
+        });
+        if (response.ok) {
+          update(convs => convs.filter(c => c.id !== id));
+          return true;
+        }
+      } catch (e) {
+        console.error('Failed to archive conversation:', e);
+      }
+      return false;
     }
   };
 }

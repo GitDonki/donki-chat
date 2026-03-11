@@ -1,12 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { X, MessageSquare, Trash2, Plus } from 'lucide-svelte';
+  import { X, MessageSquare, Trash2, Plus, Archive } from 'lucide-svelte';
   import { conversationsList, currentConversation, sidebarOpen } from '$lib/stores/chat';
   
   const dispatch = createEventDispatcher<{
     select: { id: string };
     new: void;
     delete: { id: string };
+    archive: { id: string };
   }>();
   
   onMount(() => {
@@ -32,6 +33,17 @@
       }
     } catch (e) {
       console.error('Failed to delete conversation:', e);
+    }
+  }
+  
+  async function archiveConversation(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    
+    const success = await conversationsList.archive(id);
+    if (success) {
+      if ($currentConversation?.id === id) {
+        dispatch('new');
+      }
     }
   }
   
@@ -85,12 +97,12 @@
             <span
               role="button"
               tabindex="0"
-              on:click={(e) => deleteConversation(e, conv.id)}
-              on:keydown={(e) => e.key === 'Enter' && deleteConversation(e, conv.id)}
-              class="p-1 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity cursor-pointer"
-              title="Löschen"
+              on:click={(e) => archiveConversation(e, conv.id)}
+              on:keydown={(e) => e.key === 'Enter' && archiveConversation(e, conv.id)}
+              class="p-1 opacity-0 group-hover:opacity-100 hover:text-text-secondary transition-opacity cursor-pointer"
+              title="Ausblenden"
             >
-              <Trash2 class="w-4 h-4" />
+              <Archive class="w-4 h-4" />
             </span>
           </button>
         {/each}
@@ -156,12 +168,12 @@
                 <span
                   role="button"
                   tabindex="0"
-                  on:click={(e) => deleteConversation(e, conv.id)}
-                  on:keydown={(e) => e.key === 'Enter' && deleteConversation(e, conv.id)}
-                  class="p-1 hover:text-red-400 cursor-pointer"
-                  title="Löschen"
+                  on:click={(e) => archiveConversation(e, conv.id)}
+                  on:keydown={(e) => e.key === 'Enter' && archiveConversation(e, conv.id)}
+                  class="p-1 hover:text-text-secondary cursor-pointer"
+                  title="Ausblenden"
                 >
-                  <Trash2 class="w-4 h-4" />
+                  <Archive class="w-4 h-4" />
                 </span>
               </button>
             {/each}

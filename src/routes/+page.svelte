@@ -246,10 +246,10 @@
                 <img 
                   src={getAgentAvatar($selectedAgent.id)}
                   alt={$selectedAgent.name}
-                  class="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-accent mx-auto mb-3 sm:mb-4"
+                  class="w-28 h-28 sm:w-32 sm:h-32 rounded-full object-contain bg-bg-tertiary border-4 border-accent mx-auto mb-4"
                 />
               {:else}
-                <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-bg-tertiary border-4 border-accent mx-auto mb-3 sm:mb-4 flex items-center justify-center text-5xl">
+                <div class="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-bg-tertiary border-4 border-accent mx-auto mb-4 flex items-center justify-center text-6xl">
                   {$selectedAgent.emoji}
                 </div>
               {/if}
