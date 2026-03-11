@@ -75,6 +75,12 @@ async function syncMissingMessages(agentId: string): Promise<void> {
       if (trimmed.startsWith('DEPRECATED:')) continue;
       if (trimmed.match(/^[a-f0-9]{64}$/)) continue;
       
+      // CRITICAL: Messages without ID must be rejected or saved to DB first
+      // Do NOT generate random IDs - causes reaction ID mismatch!
+      if (!msg.id) {
+        console.warn('[SSE Sync] Message without ID, will save to DB first:', content.slice(0, 50));
+      }
+      
       const messageId = msg.id || `sync-${hashContent(msg.role + ':' + content)}`;
       
       missingMessages.push({
@@ -91,15 +97,8 @@ async function syncMissingMessages(agentId: string): Promise<void> {
     if (missingMessages.length > 0) {
       console.log('[SSE] Found', missingMessages.length, 'missing messages to sync');
       
-      // Sort by timestamp and add to store
-      missingMessages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-      
-      for (const msg of missingMessages) {
-        messages.addMessage(msg);
-      }
-      
-      // Sync to DB
-      await fetch('/api/chat/history', {
+      // Sync to DB FIRST to get stable IDs
+      const syncResponse = await fetch('/api/chat/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -112,7 +111,27 @@ async function syncMissingMessages(agentId: string): Promise<void> {
         })
       });
       
-      console.log('[SSE] Synced missing messages to DB');
+      const syncData = await syncResponse.json();
+      const idMap: Record<string, string> = syncData.idMap || {};
+      
+      console.log('[SSE] Synced missing messages to DB, idMap:', idMap);
+      
+      // Update message IDs with DB IDs (if they were remapped)
+      const messagesWithCorrectIds = missingMessages.map(m => {
+        const dbId = idMap[m.id];
+        if (dbId && dbId !== m.id) {
+          console.log('[SSE] Remapping ID:', m.id, '->', dbId);
+          return { ...m, id: dbId };
+        }
+        return m;
+      });
+      
+      // Sort by timestamp and add to store
+      messagesWithCorrectIds.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      
+      for (const msg of messagesWithCorrectIds) {
+        messages.addMessage(msg);
+      }
     } else {
       console.log('[SSE] No missing messages found');
     }
@@ -252,35 +271,55 @@ function handleChatEvent(payload: any, agentId: string): void {
     );
     
     if (!exists) {
-      const messageId = msg.id || payload.runId || `sse-${hashContent('assistant:' + content)}`;
+      const tempId = msg.id || payload.runId || `sse-${hashContent('assistant:' + content)}`;
+      
+      // CRITICAL: Messages without proper ID need DB sync FIRST to get stable ID
+      if (!msg.id) {
+        console.warn('[SSE Event] Message without ID, saving to DB first');
+      }
       
       // Also check for ID collision
-      const idExists = currentMessages.some(m => m.id === messageId);
+      const idExists = currentMessages.some(m => m.id === tempId);
       if (idExists) {
-        console.warn('[SSE] Skipping message with duplicate ID:', messageId);
+        console.warn('[SSE] Skipping message with duplicate ID:', tempId);
         return;
       }
       
-      const newMessage: ChatMessage = {
-        id: messageId,
-        role: 'assistant',
-        content,
-        createdAt: new Date(msg.timestamp || payload.ts || Date.now()),
-        isStreaming: false
-      };
-      
-      messages.addMessage(newMessage);
-      console.log('[SSE] Added message from other channel for', agentId);
-      
-      // Sync to DB
+      // Sync to DB FIRST to get stable ID
       fetch('/api/chat/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: [{ id: messageId, role: 'assistant', content }],
+          messages: [{ id: tempId, role: 'assistant', content }],
           agentId
         })
-      }).catch(e => console.warn('[SSE] DB sync failed:', e));
+      })
+        .then(res => res.json())
+        .then(data => {
+          const idMap: Record<string, string> = data.idMap || {};
+          const finalId = idMap[tempId] || tempId;
+          
+          if (finalId !== tempId) {
+            console.log('[SSE] Remapped message ID:', tempId, '->', finalId);
+          }
+          
+          const newMessage: ChatMessage = {
+            id: finalId,
+            role: 'assistant',
+            content,
+            createdAt: new Date(msg.timestamp || payload.ts || Date.now()),
+            isStreaming: false
+          };
+          
+          // Check again for ID collision with final ID
+          const currentMessages = get(messages);
+          const finalIdExists = currentMessages.some(m => m.id === finalId);
+          if (!finalIdExists) {
+            messages.addMessage(newMessage);
+            console.log('[SSE] Added message from other channel for', agentId, 'with ID:', finalId);
+          }
+        })
+        .catch(e => console.warn('[SSE] DB sync failed:', e));
     }
   }
 }

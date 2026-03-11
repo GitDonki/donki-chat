@@ -159,7 +159,14 @@ export const isEmpty = derived(messages, $messages => $messages.length === 0);
 
 // Parse message from API response
 function parseMessage(m: any): ChatMessage | null {
-  const id = m.id || crypto.randomUUID();
+  // CRITICAL: Messages MUST have an ID (from DB or Gateway)
+  // Do NOT generate random IDs - causes ID mismatch with reactions
+  if (!m.id) {
+    console.warn('[Chat] Message without ID, skipping:', m);
+    return null;
+  }
+  
+  const id = m.id;
   
   // Extract content
   const content = typeof m.content === 'string' ? m.content : 
