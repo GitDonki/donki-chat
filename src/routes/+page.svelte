@@ -155,7 +155,7 @@
   <title>Donki Chat{$selectedAgent ? ` - ${$selectedAgent.name}` : ''}</title>
 </svelte:head>
 
-<div class="flex h-screen">
+<div class="flex h-full">
   <!-- Team Sidebar -->
   <TeamSidebar on:select={handleAgentSelect} on:jumpToDate={handleJumpToDate} />
   

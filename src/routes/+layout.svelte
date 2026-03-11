@@ -29,6 +29,6 @@
   {/if}
 </svelte:head>
 
-<div class="min-h-screen bg-bg-primary transition-colors duration-200">
+<div class="h-full bg-bg-primary transition-colors duration-200">
   <slot />
 </div>
