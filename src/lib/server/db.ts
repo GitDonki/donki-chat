@@ -132,6 +132,9 @@ export function initializeDatabase() {
   
   // Ensure all team agents have their default conversations
   ensureAgentConversations();
+  
+  // Clean up old/duplicate conversations (keep only agent conversations)
+  cleanupOldConversations();
 }
 
 // Ensure each agent has a dedicated conversation
@@ -147,6 +150,33 @@ export function ensureAgentConversations() {
       `).run(convId, agent.id, `Chat mit ${agent.name}`);
       console.log(`[DB] Created conversation for agent ${agent.id}: ${convId}`);
     }
+  }
+}
+
+// Clean up old/duplicate conversations (keep only agent conversations)
+export function cleanupOldConversations() {
+  const agentConvIds = TEAM_AGENTS.map(a => `conv_${a.id}`);
+  const placeholders = agentConvIds.map(() => '?').join(',');
+  
+  // Get all conversations that are NOT agent conversations
+  const toDelete = db.prepare(`
+    SELECT id, title FROM conversations WHERE id NOT IN (${placeholders})
+  `).all(...agentConvIds) as { id: string; title: string }[];
+  
+  if (toDelete.length > 0) {
+    console.log(`[DB] Cleaning up ${toDelete.length} old/duplicate conversations...`);
+    
+    // Delete messages first (foreign key constraint)
+    const deleteMsgsStmt = db.prepare('DELETE FROM messages WHERE conversation_id = ?');
+    const deleteConvStmt = db.prepare('DELETE FROM conversations WHERE id = ?');
+    
+    for (const conv of toDelete) {
+      deleteMsgsStmt.run(conv.id);
+      deleteConvStmt.run(conv.id);
+      console.log(`[DB] Deleted conversation: ${conv.id} (${conv.title})`);
+    }
+    
+    console.log(`[DB] ✅ Cleanup complete!`);
   }
 }
 
@@ -187,12 +217,17 @@ export function updateConversationTitle(id: string, title: string) {
 }
 
 export function getAllConversations(includeArchived = false) {
+  // Only return agent conversations (conv_main, conv_nabu, etc.)
+  // This fixes the duplicates issue in the sidebar
+  const agentIds = TEAM_AGENTS.map(a => `conv_${a.id}`);
+  const placeholders = agentIds.map(() => '?').join(',');
+  
   if (includeArchived) {
-    const stmt = db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC');
-    return stmt.all();
+    const stmt = db.prepare(`SELECT * FROM conversations WHERE id IN (${placeholders}) ORDER BY updated_at DESC`);
+    return stmt.all(...agentIds);
   }
-  const stmt = db.prepare('SELECT * FROM conversations WHERE archived = 0 OR archived IS NULL ORDER BY updated_at DESC');
-  return stmt.all();
+  const stmt = db.prepare(`SELECT * FROM conversations WHERE id IN (${placeholders}) AND (archived = 0 OR archived IS NULL) ORDER BY updated_at DESC`);
+  return stmt.all(...agentIds);
 }
 
 export function archiveConversation(id: string, archived = true) {

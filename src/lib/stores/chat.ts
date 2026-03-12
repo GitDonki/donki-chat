@@ -240,6 +240,7 @@ export async function loadAgentHistory(agentId: string): Promise<void> {
     }
   } catch (e) {
     console.error('[Chat] Failed to load agent history:', e);
+    error.set('Fehler beim Laden der Chat-Historie');
     messages.clear();
     pagination.set({ total: 0, loaded: 0, hasMore: false, isLoading: false });
   }
@@ -317,8 +318,9 @@ export async function selectAgent(agentId: string): Promise<void> {
   // Update selected agent
   selectedAgentId.set(agentId);
   
-  // Clear current messages
+  // Clear current state
   messages.clear();
+  error.set(null); // Clear any previous errors
   
   // Load history for this agent
   await loadAgentHistory(agentId);
