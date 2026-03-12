@@ -322,6 +322,12 @@ export async function selectAgent(agentId: string): Promise<void> {
   
   // Load history for this agent
   await loadAgentHistory(agentId);
+  
+  // Clear unread indicator for this agent (lazy import to avoid circular dependency)
+  if (typeof window !== 'undefined') {
+    const { newMessagesDetected } = await import('./agent-sync');
+    newMessagesDetected.update(map => ({ ...map, [agentId]: false }));
+  }
 }
 
 // Send message to currently selected agent

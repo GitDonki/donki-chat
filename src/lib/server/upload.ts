@@ -11,8 +11,9 @@ const MAX_FILE_SIZE = parseInt(env.MAX_FILE_SIZE || '10485760'); // 10MB default
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 // Compression settings for WebSocket-safe images
-const MAX_IMAGE_DIMENSION = 1536;
-const JPEG_QUALITY = 80;
+// Reduced to avoid 1009 Message Too Big errors
+const MAX_IMAGE_DIMENSION = 1024;  // Reduced from 1536
+const JPEG_QUALITY = 75;            // Reduced from 80
 
 export interface UploadResult {
   id: string;
@@ -69,28 +70,32 @@ export async function saveUpload(file: File): Promise<UploadResult> {
   let finalSize = file.size;
   
   // Compress images to avoid WebSocket size limits (Error 1009)
-  // GIFs are excluded to preserve animation
-  if (mimeType !== 'image/gif') {
-    try {
-      const compressed = await sharp(buffer)
-        .resize(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, { 
-          fit: 'inside', 
-          withoutEnlargement: true 
-        })
-        .jpeg({ quality: JPEG_QUALITY })
-        .toBuffer();
-      
-      // Only use compressed version if it's actually smaller
-      if (compressed.length < buffer.length) {
-        console.log(`[Upload] Compressed ${file.name}: ${buffer.length} -> ${compressed.length} bytes`);
-        buffer = compressed;
-        mimeType = 'image/jpeg';
-        finalSize = compressed.length;
-      }
-    } catch (e) {
-      console.warn('[Upload] Compression failed, using original:', e);
-      // Continue with original buffer
+  // Aggressively compress ALL images including GIFs (animation loss acceptable)
+  try {
+    const compressed = await sharp(buffer)
+      .resize(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, { 
+        fit: 'inside', 
+        withoutEnlargement: true 
+      })
+      .jpeg({ quality: JPEG_QUALITY })
+      .toBuffer();
+    
+    // ALWAYS use compressed version for WebSocket safety
+    const originalKB = Math.round(buffer.length / 1024);
+    const compressedKB = Math.round(compressed.length / 1024);
+    console.log(`[Upload] ${file.name}: ${originalKB}KB -> ${compressedKB}KB`);
+    
+    buffer = compressed;
+    mimeType = 'image/jpeg';
+    finalSize = compressed.length;
+    
+    // Warn if still too large (>500KB as Base64 = ~666KB in JSON)
+    if (compressed.length > 500000) {
+      console.warn(`[Upload] WARNING: Image still large after compression: ${compressedKB}KB`);
     }
+  } catch (e) {
+    console.error('[Upload] Compression FAILED:', e);
+    throw new Error(`Image compression failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
   }
   
   // Use .jpg extension for compressed images

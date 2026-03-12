@@ -3,6 +3,7 @@
   import { X, Settings, Users, History, EyeOff, Calendar } from 'lucide-svelte';
   import { teamMembers, selectedAgentId, loadTeam, isTeamLoading, type TeamMember } from '$lib/stores/team';
   import { sidebarOpen, historyDates, viewCleared, clearView, showAllMessages, pagination } from '$lib/stores/chat';
+  import { newMessagesDetected } from '$lib/stores/agent-sync';
   import StatusPanel from './StatusPanel.svelte';
   
   const dispatch = createEventDispatcher<{
@@ -97,6 +98,13 @@
                   class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-bg-secondary {getStatusColor(member.status)}"
                   title={getStatusTitle(member.status)}
                 ></span>
+                <!-- Unread Indicator -->
+                {#if $newMessagesDetected[member.id] && $selectedAgentId !== member.id}
+                  <span 
+                    class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-bg-secondary animate-pulse"
+                    title="Neue Nachrichten"
+                  ></span>
+                {/if}
               </div>
               
               <!-- Info -->
@@ -223,6 +231,13 @@
                     class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-bg-secondary {getStatusColor(member.status)}"
                     title={getStatusTitle(member.status)}
                   ></span>
+                  <!-- Unread Indicator -->
+                  {#if $newMessagesDetected[member.id] && $selectedAgentId !== member.id}
+                    <span 
+                      class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-bg-secondary animate-pulse"
+                      title="Neue Nachrichten"
+                    ></span>
+                  {/if}
                 </div>
                 
                 <div class="flex-1 min-w-0">

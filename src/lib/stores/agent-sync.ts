@@ -1,10 +1,14 @@
 import { writable, get } from 'svelte/store';
 import { messages, type ChatMessage } from './chat';
 import { selectedAgentId, updateMemberStatus } from './team';
+import { markAgentAsSeen } from './unread';
 
 // Polling state
 export const pollingActive = writable(false);
 export const lastPollTime = writable<number>(0);
+
+// New messages detected per agent (for unread indicator)
+export const newMessagesDetected = writable<Record<string, boolean>>({});
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastSeenMessageId: string | null = null;
@@ -113,6 +117,14 @@ async function pollAgentHistory(agentId: string): Promise<void> {
       // Add to store
       for (const msg of newMessages) {
         messages.addMessage(msg);
+      }
+      
+      // Mark as having new messages (for unread indicator)
+      const currentAgent = get(selectedAgentId);
+      if (agentId !== currentAgent) {
+        // Only set unread flag if NOT currently viewing this agent
+        newMessagesDetected.update(map => ({ ...map, [agentId]: true }));
+        console.log('[AgentSync] Unread indicator set for agent:', agentId);
       }
       
       // Sync to DB
